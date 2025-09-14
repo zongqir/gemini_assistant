@@ -176,7 +176,9 @@ function createTimelineContainer() {
     <span>问题时间线</span>
     <div>
       <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; opacity: 0.7;">⭐</button>
-      <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 8px; opacity: 0.7;">📝</button>
+      <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">📝</button>
+      <button id="global-toggle" title="查看所有对话的标记和笔记" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🌐</button>
+      <button id="clear-all-data" title="清除所有标记和笔记数据" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 8px; opacity: 0; display: none;">🗑️</button>
       <span id="question-count" style="font-size: 12px; opacity: 0.8; margin-right: 10px;">0 个问题</span>
       <button id="timeline-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 0;">−</button>
     </div>
@@ -216,15 +218,22 @@ function createTimelineContainer() {
   `;
   hintText.textContent = '⭐ 标注问题将在7天后自动清理';
   
-  // 根据当前筛选模式添加不同提示
+  // 根据当前筛选模式和视图模式添加不同提示
   const updateHintText = () => {
-    const notesToggle = document.getElementById('notes-toggle');
-    if (notesToggle && notesToggle.style.opacity === '1') {
-      hintText.innerHTML = '💡 点击📝按钮直接编辑笔记';
+    if (currentViewMode === 'global') {
+      hintText.innerHTML = '🌐 全局视图：查看所有对话的标记和笔记（只读模式）';
     } else {
-      hintText.textContent = '⭐ 标注问题将在7天后自动清理';
+      const notesToggle = document.getElementById('notes-toggle');
+      if (notesToggle && notesToggle.style.opacity === '1') {
+        hintText.innerHTML = '💡 点击📝按钮直接编辑笔记';
+      } else {
+        hintText.textContent = '⭐ 标注问题将在7天后自动清理';
+      }
     }
   };
+  
+  // 暴露更新提示的函数给全局
+  window.updateTimelineHint = updateHintText;
   
   // 监听筛选按钮变化
   document.addEventListener('click', (e) => {
@@ -255,10 +264,20 @@ function createTimelineContainer() {
   document.body.appendChild(sidebar);
 
   // 添加切换功能
+  let wasDockedBeforeMinimize = false; // 记录最小化前是否处于停靠状态
+  
   document.getElementById('timeline-toggle').addEventListener('click', function() {
     const content = document.getElementById('timeline-content');
-    const searchContainer = sidebar.children[1]; // 搜索容器
+    const searchContainer = sidebar.children[2]; // 搜索容器 (正确的索引)
+    const header = sidebar.children[1]; // 标题栏 (正确的索引)
+    const dockIndicatorElement = document.getElementById('timeline-dock-indicator'); // 获取停靠指示器
     const isCollapsed = content.style.display === 'none';
+    
+    console.log('最小化切换点击，当前状态:', { 
+      isCollapsed, 
+      currentRight: sidebar.style.right,
+      wasDockedBefore: wasDockedBeforeMinimize 
+    });
     
     if (isCollapsed) {
       // 展开：显示内容和搜索框
@@ -269,6 +288,25 @@ function createTimelineContainer() {
       
       // 恢复正常高度
       sidebar.style.maxHeight = '80vh';
+      sidebar.style.minHeight = 'auto';
+      
+      // 移除最小化状态的视觉提示
+      if (header) {
+        header.style.borderBottom = '';
+      }
+      
+      // 恢复之前的停靠状态
+      if (wasDockedBeforeMinimize) {
+        console.log('恢复到停靠状态');
+        sidebar.style.right = '-290px';
+        sidebar.style.borderRadius = '12px 0 0 12px';
+        if (dockIndicatorElement) {
+          dockIndicatorElement.style.display = 'flex';
+        }
+        wasDockedBeforeMinimize = false;
+      }
+      
+      console.log('展开完成，当前位置:', sidebar.style.right);
     } else {
       // 最小化：只隐藏内容和搜索框，保留标题栏
       content.style.display = 'none';
@@ -278,11 +316,124 @@ function createTimelineContainer() {
       
       // 调整高度为仅显示标题栏
       sidebar.style.maxHeight = '60px';
+      sidebar.style.minHeight = '60px';
+      
+      // 确保标题栏可见，并添加视觉提示
+      if (header) {
+        header.style.display = 'flex';
+        header.style.borderBottom = '2px solid rgba(102, 126, 234, 0.3)';
+      }
+      
+      // 检查当前是否在停靠状态
+      const currentRight = sidebar.style.right;
+      const isDocked = currentRight === '-290px' || currentRight.includes('-');
+      
+      console.log('最小化时检查停靠状态:', { currentRight, isDocked });
+      
+      if (isDocked) {
+        console.log('从停靠状态最小化，强制展开');
+        wasDockedBeforeMinimize = true;
+        sidebar.style.right = '20px'; // 强制展开到完全可见
+        sidebar.style.borderRadius = '12px';
+        if (dockIndicatorElement) {
+          dockIndicatorElement.style.display = 'none';
+        }
+      }
+      
+      console.log('最小化完成，当前位置:', sidebar.style.right, '标题栏可见:', header ? header.style.display : 'N/A');
     }
   });
 
   // 筛选状态变量
   let filterMode = 'all'; // 'all', 'bookmarks', 'notes'
+  
+  // 全局视图切换功能
+  document.getElementById('global-toggle').addEventListener('click', async function() {
+    const wasGlobal = currentViewMode === 'global';
+    currentViewMode = wasGlobal ? 'current' : 'global';
+    
+    // 如果切换到全局视图，先实时刷新数据
+    if (currentViewMode === 'global') {
+      console.log('🔄 切换到全局视图，实时刷新数据...');
+      try {
+        // 从存储重新加载最新数据
+        const result = await chrome.storage.local.get(['bookmarkedQuestions']);
+        if (result.bookmarkedQuestions) {
+          bookmarkedQuestions = new Map(Object.entries(result.bookmarkedQuestions));
+          console.log('✅ 全局视图数据刷新完成，加载了', bookmarkedQuestions.size, '个标注问题');
+          // 清理过期的标注
+          await cleanExpiredBookmarks();
+        } else {
+          console.log('ℹ️ 全局视图：无历史标注数据');
+        }
+      } catch (error) {
+        console.error('❌ 全局视图数据刷新失败:', error);
+      }
+    }
+    
+    // 更新按钮状态和颜色
+    const clearButton = document.getElementById('clear-all-data');
+    if (currentViewMode === 'global') {
+      this.style.opacity = '1';
+      this.style.color = '#ffd700'; // 黄色表示当前在全局视图，点击切换到本地
+      this.title = '返回当前对话视图';
+      // 显示清除按钮
+      if (clearButton) {
+        clearButton.style.display = 'inline';
+        clearButton.style.opacity = '0.7';
+      }
+    } else {
+      this.style.opacity = '0.7';
+      this.style.color = 'white'; // 白色/蓝色表示当前在本地视图，点击切换到全局
+      this.title = '查看所有对话的标记和笔记';
+      // 隐藏清除按钮
+      if (clearButton) {
+        clearButton.style.display = 'none';
+        clearButton.style.opacity = '0';
+      }
+    }
+    
+    // 更新标题显示
+    const titleSpan = document.querySelector('#gemini-timeline span');
+    if (titleSpan) {
+      titleSpan.textContent = currentViewMode === 'global' ? '全局视图' : '问题时间线';
+    }
+    
+    if (currentViewMode === 'global') {
+      // 切换到全局视图
+      renderGlobalView(filterMode);
+    } else {
+      // 切换回当前对话视图
+      renderTimeline(processedUserMessages);
+    }
+    
+    // 更新提示文本
+    if (window.updateTimelineHint) {
+      window.updateTimelineHint();
+    }
+  });
+  
+  // 添加清除全部数据功能
+  document.getElementById('clear-all-data').addEventListener('click', function() {
+    // 显示确认对话框
+    const confirmed = confirm(
+      '⚠️ 确认清除所有数据？\n\n这将删除所有对话中的标记和笔记数据，此操作无法撤销！\n\n点击"确定"继续，点击"取消"放弃操作。'
+    );
+    
+    if (confirmed) {
+      // 调用清除数据函数
+      if (window.geminiTimelineClearAllData) {
+        const success = window.geminiTimelineClearAllData();
+        if (success) {
+          // 重新渲染全局视图
+          renderGlobalView(getCurrentFilterMode());
+          showToast('所有数据已清除', 'success');
+        } else {
+          showToast('清除失败，请重试', 'error');
+        }
+      }
+    }
+  });
   
   // 添加标注切换功能
   document.getElementById('bookmarks-toggle').addEventListener('click', function() {
@@ -298,8 +449,12 @@ function createTimelineContainer() {
     notesButton.style.opacity = '0.7';
     notesButton.title = '只显示有笔记的问题';
     
-    // 重新渲染时间线 - 使用已处理的问题列表
-    renderTimeline(processedUserMessages);
+    // 根据当前视图模式重新渲染
+    if (currentViewMode === 'global') {
+      renderGlobalView(filterMode);
+    } else {
+      renderTimeline(processedUserMessages);
+    }
   });
   
   // 添加备注切换功能
@@ -316,8 +471,12 @@ function createTimelineContainer() {
     bookmarksButton.style.opacity = '0.7';
     bookmarksButton.title = '只显示标注问题';
     
-    // 重新渲染时间线 - 使用已处理的问题列表
-    renderTimeline(processedUserMessages);
+    // 根据当前视图模式重新渲染
+    if (currentViewMode === 'global') {
+      renderGlobalView(filterMode);
+    } else {
+      renderTimeline(processedUserMessages);
+    }
   });
 
   // 添加搜索功能
@@ -339,6 +498,7 @@ let lastQuestionEl = null;
 
 // 标注相关变量
 let bookmarkedQuestions = new Map(); // 存储标注的问题 key: questionId, value: {text, url, timestamp}
+let currentViewMode = 'current'; // 'current' 或 'global' 视图模式
 
 // 标注功能相关函数
 // 初始化标注数据
@@ -457,6 +617,60 @@ async function forceCleanExpiredBookmarks() {
   console.log(`Gemini Timeline: 强制清理完成，清理了 ${cleanedCount} 项数据`);
 }
 
+// 获取当前页面所有用户问题（统一的获取逻辑）
+function getAllUserQuestions() {
+  const containerSelectors = [
+    '[class*="conversation-turn"][data-is-user-turn="true"]',
+    '[class*="user-turn"]',
+    '[class*="user-message"]',
+    '[data-role="user"]',
+    '[class*="user-query-bubble"]',
+    'user-query-content',
+    '.query-text',
+    '[class*="query-text"]'
+  ];
+  
+  const foundQuestions = [];
+  
+  for (const selector of containerSelectors) {
+    try {
+      const elements = Array.from(document.querySelectorAll(selector));
+      console.log(`获取问题文本 - 选择器 "${selector}" 找到 ${elements.length} 个元素`);
+      
+      if (elements.length > 0) {
+        elements.forEach(el => {
+          const text = el.textContent?.trim() || '';
+          
+          const isSystemError = 
+            text.includes('Request ID:') ||
+            text.includes('ConnectError:') ||
+            text.includes('socket hang up') ||
+            text.includes('vscode-file://') ||
+            text.includes('at iol.$') ||
+            text.includes('at Zhr._');
+          
+          if (!isSystemError && text.length > 10) {
+            foundQuestions.push({
+              element: el,
+              text: text,
+              id: generateQuestionId(text)
+            });
+          }
+        });
+        
+        if (foundQuestions.length > 0) {
+          console.log(`获取问题文本 - 使用选择器 "${selector}"，找到 ${foundQuestions.length} 个问题`);
+          break;
+        }
+      }
+    } catch (e) {
+      console.log(`获取问题文本 - 选择器 "${selector}" 执行出错:`, e);
+    }
+  }
+  
+  return foundQuestions;
+}
+
 // 生成问题的唯一ID
 function generateQuestionId(questionText, url = window.location.href) {
   // 使用问题文本的前50个字符 + URL的hash部分作为ID
@@ -517,13 +731,40 @@ async function updateBookmarkNote(questionId, note) {
     console.log('获取到的bookmark:', bookmark);
     
     if (!bookmark) {
-      console.warn('标注不存在，尝试创建新标注');
-      // 如果标注不存在，先创建标注
-      const success = await saveBookmark(questionId, '临时问题文本', note);
-      if (success) {
-        return { success: true, message: '已创建新标注并保存笔记' };
-      } else {
-        return { success: false, error: '无法创建标注' };
+      console.warn('标注不存在，先创建标注');
+      // 如果标注不存在，先创建标注（获取实际的问题文本）
+      try {
+        // 使用统一的获取逻辑从DOM中获取实际的问题文本
+        console.log('尝试获取问题文本，questionId:', questionId);
+        const allQuestions = getAllUserQuestions();
+        console.log('找到的问题数量:', allQuestions.length);
+        
+        let questionText = '未找到问题文本';
+        
+        // 尝试通过questionId找到对应的问题文本
+        for (const question of allQuestions) {
+          console.log('比较ID:', { elementId: question.id, targetId: questionId, text: question.text.substring(0, 50) });
+          
+          if (question.id === questionId) {
+            questionText = question.text;
+            console.log('找到匹配的问题文本:', questionText.substring(0, 100));
+            break;
+          }
+        }
+        
+        if (questionText === '未找到问题文本') {
+          console.warn('警告：未能找到匹配的问题文本，questionId:', questionId);
+          console.warn('当前页面所有问题ID:', allQuestions.map(q => q.id));
+        }
+        
+        const success = await saveBookmark(questionId, questionText, note);
+        if (success) {
+          return { success: true, message: '已创建新标注并保存笔记' };
+        } else {
+          return { success: false, error: '无法创建标注' };
+        }
+      } catch (error) {
+        return { success: false, error: '创建标注失败: ' + error.message };
       }
     }
     
@@ -618,6 +859,662 @@ async function clearAllData() {
 // 导出数据清理函数，供外部调用
 window.geminiTimelineClearAllData = clearAllData;
 
+// 导出调试函数，供外部调用
+window.debugGlobalView = function() {
+  console.log('🔍 调试全局视图数据:');
+  console.log('bookmarkedQuestions大小:', bookmarkedQuestions.size);
+  console.log('currentViewMode:', currentViewMode);
+  console.log('当前URL:', window.location.href);
+  
+  const allBookmarks = Array.from(bookmarkedQuestions.entries());
+  console.log('所有标注数据:', allBookmarks.map(([id, bookmark]) => ({
+    id: id.substring(0, 15) + '...',
+    url: bookmark.url,
+    text: bookmark.text ? bookmark.text.substring(0, 30) + '...' : 'undefined'
+  })));
+  
+  // 按URL分组
+  const groupedByUrl = {};
+  allBookmarks.forEach(([questionId, bookmark]) => {
+    const url = bookmark.url || '未知对话';
+    if (!groupedByUrl[url]) {
+      groupedByUrl[url] = [];
+    }
+    groupedByUrl[url].push([questionId, bookmark]);
+  });
+  
+  console.log('按URL分组结果:', Object.keys(groupedByUrl).map(url => ({
+    url: url,
+    count: groupedByUrl[url].length,
+    isCurrentPage: url === window.location.href
+  })));
+};
+
+// 渲染全局视图
+async function renderGlobalView(filterType = 'all') {
+  const timelineContainer = document.getElementById('timeline-content');
+  if (!timelineContainer) {
+    console.warn('时间线容器不存在');
+    return;
+  }
+
+  // 清空现有内容
+  timelineContainer.innerHTML = '';
+
+  // 获取所有标注的问题
+  const allBookmarks = Array.from(bookmarkedQuestions.entries());
+  
+  // 调试输出所有书签数据
+  console.log('🌐 全局视图渲染调试:', {
+    totalBookmarks: allBookmarks.length,
+    currentUrl: window.location.href,
+    allBookmarksUrls: allBookmarks.map(([id, bookmark]) => ({
+      id: id.substring(0, 10) + '...',
+      url: bookmark.url,
+      text: bookmark.text ? bookmark.text.substring(0, 30) + '...' : 'undefined'
+    }))
+  });
+  
+  // 修复错误的问题文本数据
+  let needsDataFix = false;
+  const allQuestions = getAllUserQuestions();
+  console.log('全局视图数据修复 - 当前页面找到问题数量:', allQuestions.length);
+  
+  for (const [questionId, bookmark] of allBookmarks) {
+    if (bookmark.text === '问题文本' || bookmark.text === '未找到问题文本') {
+      console.log('发现需要修复的数据:', questionId, bookmark.text);
+      
+      // 使用统一的获取逻辑尝试从DOM中重新获取问题文本
+      for (const question of allQuestions) {
+        if (question.id === questionId) {
+          console.log('修复问题文本:', question.text.substring(0, 50));
+          bookmark.text = question.text;
+          bookmarkedQuestions.set(questionId, bookmark);
+          needsDataFix = true;
+          break;
+        }
+      }
+      
+      // 如果在当前页面没找到，说明这个问题来自其他页面
+      if (bookmark.text === '问题文本' || bookmark.text === '未找到问题文本') {
+        console.log('该问题来自其他页面，无法在当前页面修复:', questionId);
+        // 为来自其他页面的问题生成一个更友好的显示文本
+        const urlObj = new URL(bookmark.url || window.location.href);
+        const pathParts = urlObj.pathname.split('/');
+        const conversationId = pathParts[pathParts.length - 1] || 'unknown';
+        bookmark.text = `来自其他对话的问题 (${conversationId.substring(0, 8)}...)`;
+        bookmarkedQuestions.set(questionId, bookmark);
+        needsDataFix = true;
+      }
+    }
+  }
+  
+  // 如果有数据修复，保存到存储
+  if (needsDataFix) {
+    try {
+      const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
+      await chrome.storage.local.set({ bookmarkedQuestions: bookmarksObj });
+      console.log('数据修复完成，已保存到存储');
+    } catch (error) {
+      console.error('数据修复保存失败:', error);
+    }
+  }
+  
+  if (allBookmarks.length === 0) {
+    timelineContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: #666;">暂无全局标记记录</div>';
+    updateQuestionCount(0, 0);
+    return;
+  }
+
+  // 按时间戳排序（最新在前）
+  allBookmarks.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+
+  // 根据筛选类型过滤
+  let filteredBookmarks = allBookmarks;
+  if (filterType === 'bookmarks') {
+    // 只显示有标记的（所有都是）
+    filteredBookmarks = allBookmarks;
+  } else if (filterType === 'notes') {
+    // 只显示有笔记的
+    filteredBookmarks = allBookmarks.filter(([id, bookmark]) => bookmark.note && bookmark.note.trim());
+  }
+
+  if (filteredBookmarks.length === 0) {
+    const emptyMessage = filterType === 'notes' ? '暂无全局笔记记录' : '暂无全局标记记录';
+    timelineContainer.innerHTML = `<div style="padding: 16px; text-align: center; color: #666;">${emptyMessage}</div>`;
+    updateQuestionCount(0, 0);
+    return;
+  }
+
+  // 按URL分组显示
+  const groupedByUrl = {};
+  filteredBookmarks.forEach(([questionId, bookmark]) => {
+    const url = bookmark.url || '未知对话';
+    if (!groupedByUrl[url]) {
+      groupedByUrl[url] = [];
+    }
+    groupedByUrl[url].push([questionId, bookmark]);
+  });
+
+  // 渲染分组内容
+  Object.keys(groupedByUrl).forEach((url, groupIndex) => {
+    const items = groupedByUrl[url];
+    
+    // 创建对话组标题
+    const groupTitle = document.createElement('div');
+    groupTitle.style.cssText = `
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    `;
+    
+    // 提取有意义的对话标识
+    let conversationTitle = '未知对话';
+    try {
+      if (url && url !== '未知对话') {
+        const urlObj = new URL(url);
+        // 尝试从URL中提取对话ID或使用第一个问题作为标识
+        const pathParts = urlObj.pathname.split('/');
+        const conversationId = pathParts[pathParts.length - 1] || 'unknown';
+        
+        // 使用第一个问题的前50个字符作为对话描述
+        const firstQuestion = items[0] && items[0][1] && items[0][1].text ? 
+          items[0][1].text.substring(0, 50) + '...' : 
+          '无问题文本';
+        
+        // 调试输出
+        console.log('全局视图对话组调试:', {
+          url: url,
+          itemsCount: items.length,
+          firstQuestionText: items[0] && items[0][1] ? items[0][1].text.substring(0, 100) : 'undefined'
+        });
+          
+        conversationTitle = `💬 ${firstQuestion} (${items.length}项)`;
+      } else {
+        // 使用第一个问题作为标识
+        const firstQuestion = items[0] && items[0][1] && items[0][1].text ? 
+          items[0][1].text.substring(0, 50) + '...' : 
+          '无问题文本';
+        conversationTitle = `💬 ${firstQuestion} (${items.length}项)`;
+      }
+    } catch (e) {
+      const firstQuestion = items[0] && items[0][1] && items[0][1].text ? 
+        items[0][1].text.substring(0, 50) + '...' : 
+        '无问题文本';
+      conversationTitle = `💬 ${firstQuestion} (${items.length}项)`;
+    }
+    
+    groupTitle.textContent = conversationTitle;
+    timelineContainer.appendChild(groupTitle);
+
+    // 渲染该组的问题
+    items.forEach(([questionId, bookmark], index) => {
+      const questionItem = document.createElement('div');
+      questionItem.className = 'timeline-item';
+      questionItem.style.cssText = `
+        padding: 12px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        display: block !important;
+      `;
+
+      questionItem.addEventListener('mouseenter', () => {
+        questionItem.style.backgroundColor = '#f8f9fa';
+      });
+
+      questionItem.addEventListener('mouseleave', () => {
+        questionItem.style.backgroundColor = 'transparent';
+      });
+
+      const questionContent = document.createElement('div');
+      questionContent.style.cssText = `
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        width: 100%;
+      `;
+
+      // 标记按钮在全局视图中不显示
+
+      // 笔记按钮
+      const noteButton = document.createElement('button');
+      noteButton.style.cssText = `
+        background: ${bookmark.note && bookmark.note.trim() ? '#3b82f6' : '#e5e7eb'};
+        border: 1px solid ${bookmark.note && bookmark.note.trim() ? '#2563eb' : '#d1d5db'};
+        color: ${bookmark.note && bookmark.note.trim() ? 'white' : '#6b7280'};
+        border-radius: 4px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: ${bookmark.note && bookmark.note.trim() ? 'pointer' : 'default'};
+        font-size: 10px;
+        flex-shrink: 0;
+        min-width: 20px;
+        min-height: 20px;
+      `;
+      noteButton.innerHTML = '📝';
+      noteButton.title = bookmark.note && bookmark.note.trim() ? '查看笔记' : '无笔记';
+
+      // 如果有笔记，点击可查看
+      if (bookmark.note && bookmark.note.trim()) {
+        noteButton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showNoteModal(questionId, bookmark.text, bookmark.note, true);
+        });
+      }
+
+      // 问题文本
+      const questionTextSpan = document.createElement('span');
+      questionTextSpan.style.cssText = `
+        flex: 1;
+        color: #333;
+        line-height: 1.4;
+        font-size: 13px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-height: 2.8em;
+      `;
+
+      const displayText = bookmark.text || '未知问题';
+      questionTextSpan.textContent = `${index + 1}: ${displayText}`;
+
+      // 时间标签
+      const timeSpan = document.createElement('div');
+      timeSpan.style.cssText = `
+        font-size: 11px;
+        color: #999;
+        margin-top: 4px;
+        flex-shrink: 0;
+      `;
+      const timeStr = bookmark.timestamp ? new Date(bookmark.timestamp).toLocaleString('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '未知时间';
+      timeSpan.textContent = timeStr;
+
+      // 全局视图中不显示标记按钮，只显示笔记按钮
+      questionContent.appendChild(noteButton);
+      questionContent.appendChild(questionTextSpan);
+
+      questionItem.appendChild(questionContent);
+      questionItem.appendChild(timeSpan);
+
+      // 如果有笔记，显示完整笔记内容
+      if (bookmark.note && bookmark.note.trim()) {
+        const noteContent = document.createElement('div');
+        noteContent.style.cssText = `
+          margin-top: 8px;
+          padding: 10px 12px;
+          background: #f0f9ff;
+          border-left: 4px solid #3b82f6;
+          border-radius: 0 6px 6px 0;
+          font-size: 13px;
+          color: #1e40af;
+          line-height: 1.5;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        `;
+        
+        // 创建笔记标题
+        const noteHeader = document.createElement('div');
+        noteHeader.style.cssText = `
+          font-weight: 600;
+          margin-bottom: 6px;
+          font-size: 12px;
+          color: #1565c0;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        `;
+        noteHeader.innerHTML = '📝 我的笔记';
+        
+        // 创建笔记正文
+        const noteBody = document.createElement('div');
+        noteBody.style.cssText = `
+          color: #1e40af;
+          font-size: 13px;
+          line-height: 1.4;
+        `;
+        noteBody.textContent = bookmark.note;
+        
+        noteContent.appendChild(noteHeader);
+        noteContent.appendChild(noteBody);
+        questionItem.appendChild(noteContent);
+      }
+
+      timelineContainer.appendChild(questionItem);
+    });
+  });
+
+  // 更新计数
+  updateQuestionCount(filteredBookmarks.length, allBookmarks.length);
+}
+
+// 带搜索功能的全局视图渲染
+function renderGlobalViewWithSearch(searchTerm) {
+  const timelineContainer = document.getElementById('timeline-content');
+  if (!timelineContainer) {
+    console.warn('时间线容器不存在');
+    return;
+  }
+
+  // 清空现有内容
+  timelineContainer.innerHTML = '';
+
+  // 获取所有标注的问题
+  const allBookmarks = Array.from(bookmarkedQuestions.entries());
+  
+  if (allBookmarks.length === 0) {
+    timelineContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: #666;">暂无全局标记记录</div>';
+    updateQuestionCount(0, 0);
+    return;
+  }
+
+  // 搜索过滤
+  let filteredBySearch = allBookmarks;
+  if (searchTerm) {
+    filteredBySearch = allBookmarks.filter(([questionId, bookmark]) => {
+      const questionText = (bookmark.text || '').toLowerCase();
+      const noteText = (bookmark.note || '').toLowerCase();
+      return questionText.includes(searchTerm.toLowerCase()) || 
+             noteText.includes(searchTerm.toLowerCase());
+    });
+  }
+
+  // 按时间戳排序（最新在前）
+  filteredBySearch.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+
+  // 根据筛选类型过滤
+  let filteredBookmarks = filteredBySearch;
+  const currentFilterMode = getCurrentFilterMode();
+  if (currentFilterMode === 'bookmarks') {
+    // 只显示有标记的（所有都是）
+    filteredBookmarks = filteredBySearch;
+  } else if (currentFilterMode === 'notes') {
+    // 只显示有笔记的
+    filteredBookmarks = filteredBySearch.filter(([id, bookmark]) => bookmark.note && bookmark.note.trim());
+  }
+
+  if (filteredBookmarks.length === 0) {
+    const emptyMessage = searchTerm ? `未找到包含"${searchTerm}"的记录` : '暂无符合条件的记录';
+    timelineContainer.innerHTML = `<div style="padding: 16px; text-align: center; color: #666;">${emptyMessage}</div>`;
+    updateQuestionCount(0, allBookmarks.length);
+    return;
+  }
+
+  // 显示搜索结果提示
+  if (searchTerm) {
+    const searchHint = document.createElement('div');
+    searchHint.style.cssText = `
+      padding: 8px 16px;
+      background: #e3f2fd;
+      border-bottom: 1px solid #bbdefb;
+      font-size: 12px;
+      color: #1565c0;
+      text-align: center;
+    `;
+    searchHint.textContent = `搜索"${searchTerm}"的结果：${filteredBookmarks.length} 项`;
+    timelineContainer.appendChild(searchHint);
+  }
+
+  // 按URL分组显示（简化版，减少重复代码）
+  renderGlobalItems(filteredBookmarks, searchTerm);
+
+  // 更新计数
+  updateQuestionCount(filteredBookmarks.length, allBookmarks.length);
+}
+
+// 获取当前筛选模式
+function getCurrentFilterMode() {
+  const bookmarksButton = document.getElementById('bookmarks-toggle');
+  const notesButton = document.getElementById('notes-toggle');
+  
+  if (bookmarksButton?.style.opacity === '1') return 'bookmarks';
+  if (notesButton?.style.opacity === '1') return 'notes';
+  return 'all';
+}
+
+// 渲染全局视图项目
+function renderGlobalItems(filteredBookmarks, searchTerm = '') {
+  const timelineContainer = document.getElementById('timeline-content');
+  
+  // 按URL分组显示
+  const groupedByUrl = {};
+  filteredBookmarks.forEach(([questionId, bookmark]) => {
+    const url = bookmark.url || '未知对话';
+    if (!groupedByUrl[url]) {
+      groupedByUrl[url] = [];
+    }
+    groupedByUrl[url].push([questionId, bookmark]);
+  });
+
+  // 渲染分组内容
+  Object.keys(groupedByUrl).forEach((url, groupIndex) => {
+    const items = groupedByUrl[url];
+    
+    // 创建对话组标题
+    const groupTitle = document.createElement('div');
+    groupTitle.style.cssText = `
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 12px;
+      color: #666;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    `;
+    
+    let conversationTitle = '未知对话';
+    try {
+      if (url && url !== '未知对话') {
+        const urlObj = new URL(url);
+        conversationTitle = `对话 ${groupIndex + 1} (${items.length}项)`;
+      }
+    } catch (e) {
+      conversationTitle = `对话 ${groupIndex + 1} (${items.length}项)`;
+    }
+    
+    groupTitle.textContent = conversationTitle;
+    timelineContainer.appendChild(groupTitle);
+
+    // 渲染该组的问题
+    items.forEach(([questionId, bookmark], index) => {
+      const questionItem = createGlobalQuestionItem(questionId, bookmark, index, searchTerm);
+      timelineContainer.appendChild(questionItem);
+    });
+  });
+}
+
+// 创建全局视图问题项
+function createGlobalQuestionItem(questionId, bookmark, index, searchTerm = '') {
+  const questionItem = document.createElement('div');
+  questionItem.className = 'timeline-item';
+  questionItem.style.cssText = `
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    display: block !important;
+  `;
+
+  questionItem.addEventListener('mouseenter', () => {
+    questionItem.style.backgroundColor = '#f8f9fa';
+  });
+
+  questionItem.addEventListener('mouseleave', () => {
+    questionItem.style.backgroundColor = 'transparent';
+  });
+
+  const questionContent = document.createElement('div');
+  questionContent.style.cssText = `
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  `;
+
+  // 标记按钮在全局视图中不显示
+
+  // 笔记按钮
+  const noteButton = document.createElement('button');
+  noteButton.style.cssText = `
+    background: ${bookmark.note && bookmark.note.trim() ? '#3b82f6' : '#e5e7eb'};
+    border: 1px solid ${bookmark.note && bookmark.note.trim() ? '#2563eb' : '#d1d5db'};
+    color: ${bookmark.note && bookmark.note.trim() ? 'white' : '#6b7280'};
+    border-radius: 4px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: ${bookmark.note && bookmark.note.trim() ? 'pointer' : 'default'};
+    font-size: 10px;
+    flex-shrink: 0;
+    min-width: 20px;
+    min-height: 20px;
+  `;
+  noteButton.innerHTML = '📝';
+  noteButton.title = bookmark.note && bookmark.note.trim() ? '查看笔记' : '无笔记';
+
+  // 如果有笔记，点击可查看
+  if (bookmark.note && bookmark.note.trim()) {
+    noteButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showNoteModal(questionId, bookmark.text, bookmark.note, true);
+    });
+  }
+
+  // 问题文本（支持搜索高亮）
+  const questionTextSpan = document.createElement('span');
+  questionTextSpan.style.cssText = `
+    flex: 1;
+    color: #333;
+    line-height: 1.4;
+    font-size: 13px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-height: 2.8em;
+  `;
+
+  const displayText = bookmark.text || '未知问题';
+  let highlightedText = `${index + 1}: ${displayText}`;
+  
+  // 搜索高亮
+  if (searchTerm && displayText.toLowerCase().includes(searchTerm.toLowerCase())) {
+    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    highlightedText = highlightedText.replace(regex, '<mark style="background: #ffeb3b; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+    questionTextSpan.innerHTML = highlightedText;
+  } else {
+    questionTextSpan.textContent = highlightedText;
+  }
+
+  // 时间标签
+  const timeSpan = document.createElement('div');
+  timeSpan.style.cssText = `
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+    flex-shrink: 0;
+  `;
+  const timeStr = bookmark.timestamp ? new Date(bookmark.timestamp).toLocaleString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : '未知时间';
+  timeSpan.textContent = timeStr;
+
+  questionContent.appendChild(bookmarkButton);
+  questionContent.appendChild(noteButton);
+  questionContent.appendChild(questionTextSpan);
+
+  questionItem.appendChild(questionContent);
+  questionItem.appendChild(timeSpan);
+
+  // 如果有笔记，显示完整笔记内容（支持搜索高亮）
+  if (bookmark.note && bookmark.note.trim()) {
+    const noteContent = document.createElement('div');
+    noteContent.style.cssText = `
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: #f0f9ff;
+      border-left: 4px solid #3b82f6;
+      border-radius: 0 6px 6px 0;
+      font-size: 13px;
+      color: #1e40af;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    `;
+    
+    // 如果有搜索词匹配，高亮背景
+    if (searchTerm && bookmark.note.toLowerCase().includes(searchTerm.toLowerCase())) {
+      noteContent.style.background = '#fff3cd';
+    }
+    
+    // 创建笔记标题
+    const noteHeader = document.createElement('div');
+    noteHeader.style.cssText = `
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #1565c0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    `;
+    noteHeader.innerHTML = '📝 我的笔记';
+    
+    // 创建笔记正文
+    const noteBody = document.createElement('div');
+    noteBody.style.cssText = `
+      color: #1e40af;
+      font-size: 13px;
+      line-height: 1.4;
+    `;
+    
+    // 笔记内容搜索高亮
+    if (searchTerm && bookmark.note.toLowerCase().includes(searchTerm.toLowerCase())) {
+      const regex = new RegExp(`(${searchTerm})`, 'gi');
+      const highlightedNote = bookmark.note.replace(regex, '<mark style="background: #ffeb3b; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+      noteBody.innerHTML = highlightedNote;
+    } else {
+      noteBody.textContent = bookmark.note;
+    }
+    
+    noteContent.appendChild(noteHeader);
+    noteContent.appendChild(noteBody);
+    questionItem.appendChild(noteContent);
+  }
+
+  return questionItem;
+}
+
 // 检查问题是否已标注
 function isBookmarked(questionId) {
   const bookmark = bookmarkedQuestions.get(questionId);
@@ -704,8 +1601,12 @@ function showBookmarkNotification(count) {
       bookmarksToggle.style.opacity = '1';
       bookmarksToggle.title = '显示所有问题';
       
-      // 重新渲染时间线，只显示标注问题 - 使用已处理的问题列表
-      renderTimeline(processedUserMessages);
+      // 根据当前视图模式重新渲染
+      if (currentViewMode === 'global') {
+        renderGlobalView(filterMode);
+      } else {
+        renderTimeline(processedUserMessages);
+      }
     }
     
     // 移除通知
@@ -737,7 +1638,7 @@ function showBookmarkNotification(count) {
 }
 
 // 显示备注编辑弹窗
-function showNoteModal(questionId, questionText, currentNote = '') {
+function showNoteModal(questionId, questionText, currentNote = '', readOnly = false) {
   // 移除现有的弹窗
   const existingModal = document.getElementById('note-modal');
   if (existingModal) {
@@ -776,20 +1677,18 @@ function showNoteModal(questionId, questionText, currentNote = '') {
   
   modalContent.innerHTML = `
     <div style="margin-bottom: 16px;">
-      <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #333;">记录笔记内容</h3>
+      <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #333;">${readOnly ? '查看笔记内容' : '记录笔记内容'}</h3>
       <div style="font-size: 14px; color: #666; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis;">
         ${questionText.substring(0, 150)}${questionText.length > 150 ? '...' : ''}
       </div>
-      <div style="font-size: 11px; color: #999; margin-top: 4px;">
-        调试信息: ID=${questionId.substring(0, 8)}... | 标注数=${bookmarkedQuestions.size}
-      </div>
+      ${readOnly ? '<div style="font-size: 11px; color: #999; margin-top: 4px;">🌐 全局视图 - 只读模式</div>' : ''}
     </div>
     
     <div style="margin-bottom: 20px;">
       <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #333; font-weight: 500;">
         笔记内容：
       </label>
-      <textarea id="note-input" placeholder="记录这个问题的重要性或原因，如：答案很不错、需要参考、重要信息等..." style="
+      <textarea id="note-input" placeholder="${readOnly ? '笔记内容（只读）' : '记录这个问题的重要性或原因，如：答案很不错、需要参考、重要信息等...'}" style="
         width: 100%;
         height: 100px;
         padding: 12px;
@@ -801,7 +1700,9 @@ function showNoteModal(questionId, questionText, currentNote = '') {
         outline: none;
         transition: border-color 0.2s ease;
         box-sizing: border-box;
-      ">${currentNote}</textarea>
+        background: ${readOnly ? '#f5f5f5' : 'white'};
+        color: ${readOnly ? '#666' : '#333'};
+      " ${readOnly ? 'readonly' : ''}>${currentNote}</textarea>
     </div>
     
     <div style="display: flex; gap: 12px; justify-content: flex-end;">
@@ -814,8 +1715,8 @@ function showNoteModal(questionId, questionText, currentNote = '') {
         font-size: 14px;
         cursor: pointer;
         transition: all 0.2s ease;
-      ">取消</button>
-      <button id="note-save" style="
+      ">${readOnly ? '关闭' : '取消'}</button>
+      ${readOnly ? '' : `<button id="note-save" style="
         padding: 10px 20px;
         border: none;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -824,7 +1725,7 @@ function showNoteModal(questionId, questionText, currentNote = '') {
         font-size: 14px;
         cursor: pointer;
         transition: all 0.2s ease;
-      ">保存</button>
+      ">保存</button>`}
     </div>
   `;
   
@@ -834,7 +1735,7 @@ function showNoteModal(questionId, questionText, currentNote = '') {
   // 获取元素
   const noteInput = document.getElementById('note-input');
   const cancelBtn = document.getElementById('note-cancel');
-  const saveBtn = document.getElementById('note-save');
+  const saveBtn = readOnly ? null : document.getElementById('note-save');
   
   // 聚焦到输入框
   setTimeout(() => {
@@ -861,15 +1762,18 @@ function showNoteModal(questionId, questionText, currentNote = '') {
     cancelBtn.style.color = '#666';
   });
   
-  saveBtn.addEventListener('mouseenter', () => {
-    saveBtn.style.transform = 'translateY(-1px)';
-    saveBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
-  });
-  
-  saveBtn.addEventListener('mouseleave', () => {
-    saveBtn.style.transform = 'translateY(0)';
-    saveBtn.style.boxShadow = 'none';
-  });
+  // 只在非只读模式下添加保存按钮的事件
+  if (saveBtn) {
+    saveBtn.addEventListener('mouseenter', () => {
+      saveBtn.style.transform = 'translateY(-1px)';
+      saveBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+    });
+    
+    saveBtn.addEventListener('mouseleave', () => {
+      saveBtn.style.transform = 'translateY(0)';
+      saveBtn.style.boxShadow = 'none';
+    });
+  }
   
   // 事件处理
   const closeModal = () => {
@@ -899,8 +1803,9 @@ function showNoteModal(questionId, questionText, currentNote = '') {
   };
   document.addEventListener('keydown', handleEsc);
   
-  // 保存备注
-  saveBtn.addEventListener('click', async () => {
+  // 保存备注（只在非只读模式下）
+  if (!readOnly && saveBtn) {
+    saveBtn.addEventListener('click', async () => {
     const note = noteInput.value.trim();
     console.log('开始保存笔记:', {
       questionId,
@@ -913,8 +1818,12 @@ function showNoteModal(questionId, questionText, currentNote = '') {
       console.log('保存结果:', result);
       
       if (result.success) {
-        // 重新渲染时间线以显示更新后的笔记 - 使用已处理的问题列表
-        renderTimeline(processedUserMessages);
+        // 根据当前视图模式重新渲染
+        if (currentViewMode === 'global') {
+          renderGlobalView(getCurrentFilterMode());
+        } else {
+          renderTimeline(processedUserMessages);
+        }
         
         closeModal();
         
@@ -928,14 +1837,15 @@ function showNoteModal(questionId, questionText, currentNote = '') {
       console.error('保存过程出现异常:', error);
       showToast(`保存异常: ${error.message}`, 'error');
     }
-  });
-  
-  // Ctrl+Enter 快捷保存
-  noteInput.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 'Enter') {
-      saveBtn.click();
-    }
-  });
+    });
+    
+    // Ctrl+Enter 快捷保存
+    noteInput.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        saveBtn.click();
+      }
+    });
+  }
 }
 
 // 显示提示消息
@@ -1093,23 +2003,56 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
   
   function expandTimeline() {
     isExpanded = true;
+    const dockIndicatorElement = document.getElementById('timeline-dock-indicator');
+    const toggleButton = document.getElementById('timeline-toggle');
+    const isMinimized = toggleButton && toggleButton.textContent === '+';
+    
+    console.log('expandTimeline调用，最小化状态:', isMinimized);
+    
     sidebar.style.right = '20px';
     sidebar.style.borderRadius = '12px';
-    dockIndicator.style.display = 'none';
+    if (dockIndicatorElement) {
+      dockIndicatorElement.style.display = 'none';
+    }
     
-    // 确保内容区域可以滚动
+    // 确保内容区域可以滚动，但要检查是否处于最小化状态
     const timelineContent = document.getElementById('timeline-content');
-    if (timelineContent) {
+    if (timelineContent && !isMinimized) {
       timelineContent.style.overflowY = 'auto';
       timelineContent.style.pointerEvents = 'auto';
     }
+    
+    console.log('expandTimeline完成，位置:', sidebar.style.right);
   }
   
   function collapseTimeline() {
     isExpanded = false;
+    
+    // 检查是否处于最小化状态
+    const toggleButton = document.getElementById('timeline-toggle');
+    const isMinimized = toggleButton && toggleButton.textContent === '+';
+    const dockIndicatorElement = document.getElementById('timeline-dock-indicator');
+    
+    console.log('collapseTimeline调用，最小化状态:', isMinimized);
+    
+    // 如果是最小化状态，不要停靠，保持展开状态
+    if (isMinimized) {
+      console.log('保持最小化展开状态');
+      sidebar.style.right = '20px'; // 保持展开状态
+      sidebar.style.borderRadius = '12px';
+      if (dockIndicatorElement) {
+        dockIndicatorElement.style.display = 'none';
+      }
+      return; // 直接返回，不执行停靠逻辑
+    }
+    
+    // 正常停靠
+    console.log('执行正常停靠');
     sidebar.style.right = '-290px';
     sidebar.style.borderRadius = '12px 0 0 12px';
-    dockIndicator.style.display = 'flex';
+    if (dockIndicatorElement) {
+      dockIndicatorElement.style.display = 'flex';
+    }
     
     // 确保停靠状态下内容区域仍然可以滚动
     const timelineContent = document.getElementById('timeline-content');
@@ -1269,6 +2212,12 @@ function setupSearch() {
 
 // 过滤问题（包括笔记搜索）
 function filterQuestions(searchTerm) {
+  if (currentViewMode === 'global') {
+    // 在全局视图中，重新渲染以应用搜索过滤
+    renderGlobalViewWithSearch(searchTerm);
+    return;
+  }
+  
   const timelineContent = document.getElementById('timeline-content');
   if (!timelineContent) return;
 
@@ -1561,8 +2510,12 @@ function scanQuestions() {
     console.log(`Gemini Timeline: 问题 ${i+1}: "${questionText}..."`);
   }
 
-  // 渲染到时间线
-  renderTimeline(userMessages);
+  // 根据当前视图模式渲染
+  if (currentViewMode === 'global') {
+    renderGlobalView(getCurrentFilterMode());
+  } else {
+    renderTimeline(userMessages);
+  }
 }
 
 // 渲染时间线
@@ -1792,7 +2745,7 @@ function renderTimeline(userMessages) {
       console.log('添加笔记按钮到问题:', index + 1, noteButton);
       
       // 按顺序添加：五角星 -> 笔记按钮 -> 问题文本
-      questionContent.appendChild(bookmarkButton);
+      // 全局视图中不显示标记按钮，只显示笔记按钮
       questionContent.appendChild(noteButton);
       questionContent.appendChild(questionTextSpan);
       
@@ -1875,8 +2828,12 @@ function renderTimeline(userMessages) {
             this.style.color = '#ccc';
             this.title = '标注问题';
             
-            // 重新渲染时间线 - 使用已处理的问题列表
-            renderTimeline(processedUserMessages);
+            // 根据当前视图模式重新渲染
+            if (currentViewMode === 'global') {
+              renderGlobalView(getCurrentFilterMode());
+            } else {
+              renderTimeline(processedUserMessages);
+            }
             
             showToast('标注已移除', 'info');
           }
@@ -1888,8 +2845,12 @@ function renderTimeline(userMessages) {
             this.style.color = '#ffd700';
             this.title = '已标注';
             
-            // 重新渲染时间线 - 使用已处理的问题列表
-            renderTimeline(processedUserMessages);
+            // 根据当前视图模式重新渲染
+            if (currentViewMode === 'global') {
+              renderGlobalView(getCurrentFilterMode());
+            } else {
+              renderTimeline(processedUserMessages);
+            }
             
             showToast('标注已保存', 'success');
           }
