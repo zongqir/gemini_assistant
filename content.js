@@ -2745,7 +2745,7 @@ function renderTimeline(userMessages) {
       console.log('添加笔记按钮到问题:', index + 1, noteButton);
       
       // 按顺序添加：五角星 -> 笔记按钮 -> 问题文本
-      // 全局视图中不显示标记按钮，只显示笔记按钮
+      questionContent.appendChild(bookmarkButton);
       questionContent.appendChild(noteButton);
       questionContent.appendChild(questionTextSpan);
       
