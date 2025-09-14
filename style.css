@@ -104,6 +104,43 @@
   }
 }
 
+/* 标注问题的特殊样式 */
+.timeline-item.bookmarked {
+  background-color: #fff3cd !important;
+  border-left-color: #ffd700 !important;
+}
+
+.timeline-item.bookmarked:hover {
+  background-color: #fff8dc !important;
+}
+
+/* 标注按钮样式 */
+.bookmark-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.bookmark-button:hover {
+  transform: scale(1.2);
+}
+
+.bookmark-button.bookmarked {
+  color: #ffd700;
+}
+
+.bookmark-button:not(.bookmarked) {
+  color: #ccc;
+}
+
+.bookmark-button:not(.bookmarked):hover {
+  color: #667eea;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
   .timeline-container {
