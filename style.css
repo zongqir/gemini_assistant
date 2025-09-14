@@ -1,0 +1,129 @@
+/* 时间线容器样式 */
+.timeline-container {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  width: 250px;
+  max-height: 60vh;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* 时间线标题样式 */
+.timeline-title {
+  padding: 12px 16px;
+  background-color: #4285f4;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* 时间线内容区域样式 */
+.timeline-content {
+  padding: 8px 0;
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc #f0f0f0;
+}
+
+/* 滚动条样式 */
+.timeline-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.timeline-content::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+.timeline-content::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 3px;
+}
+
+/* 时间线条目样式 */
+.timeline-item {
+  padding: 10px 16px;
+  margin: 2px 0;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text; /* 允许文本选择 */
+  -webkit-user-select: text; /* Safari 支持 */
+  -moz-user-select: text; /* Firefox 支持 */
+  -ms-user-select: text; /* IE 支持 */
+}
+
+.timeline-item:hover {
+  background-color: #f5f5f5;
+  border-left-color: #4285f4;
+}
+
+.timeline-item.active {
+  background-color: #e8f0fe;
+  border-left-color: #4285f4;
+  font-weight: 500;
+}
+
+/* 空状态样式 */
+.timeline-empty {
+  padding: 20px 16px;
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+}
+
+/* 问题高亮效果 */
+.timeline-highlight {
+  animation: highlight 2s ease-in-out;
+}
+
+@keyframes highlight {
+  0%, 100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+  50% {
+    background-color: rgba(66, 133, 244, 0.1);
+    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
+    border-radius: 8px;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .timeline-container {
+    width: 200px;
+    right: 10px;
+  }
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.timeline-container {
+  animation: fadeIn 0.3s ease-out;
+}

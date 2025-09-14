@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Timeline Assistant",
+  "version": "1.0",
+  "description": "在Gemini对话中显示问题时间线，方便快速跳转到之前的问题",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon.svg",
+      "48": "images/icon.svg",
+      "128": "images/icon.svg"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://gemini.google.com/*"],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ],
+  "icons": {
+    "16": "images/icon.svg",
+    "48": "images/icon.svg",
+    "128": "images/icon.svg"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
