@@ -1,15 +1,190 @@
+// ==============================================
+// GEMINI TIMELINE ASSISTANT - CONTENT SCRIPT
+// ==============================================
+console.log('🔥🔥🔥 GEMINI TIMELINE CONTENT SCRIPT LOADED 🔥🔥🔥');
+console.log('当前页面URL:', window.location.href);
+console.log('当前时间:', new Date().toLocaleString());
+
+console.log('🔍 诊断页面环境...');
+
+// 诊断1: 检查CSP
+console.log('CSP策略:', document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content || '无');
+
+// 诊断2: 尝试多种注入方式
+const methods = [
+  {
+    name: '方法1: 内联script注入',
+    test: () => {
+      const script = document.createElement('script');
+      script.textContent = 'window.TEST_METHOD_1 = "success"; console.log("方法1执行成功");';
+      document.head.appendChild(script);
+      script.remove();
+      return 'window.TEST_METHOD_1';
+    }
+  },
+  {
+    name: '方法2: 外部script注入',
+    test: () => {
+      const script = document.createElement('script');
+      script.src = 'data:text/javascript,window.TEST_METHOD_2="success";console.log("方法2执行成功");';
+      document.head.appendChild(script);
+      return 'window.TEST_METHOD_2';
+    }
+  },
+  {
+    name: '方法3: eval注入',
+    test: () => {
+      try {
+        const code = 'window.TEST_METHOD_3 = "success"; console.log("方法3执行成功");';
+        const script = document.createElement('script');
+        script.appendChild(document.createTextNode(`(function(){${code}})()`));
+        document.head.appendChild(script);
+        script.remove();
+        return 'window.TEST_METHOD_3';
+      } catch(e) {
+        console.error('方法3失败:', e);
+        return false;
+      }
+    }
+  }
+];
+
+// 测试所有方法
+methods.forEach((method, index) => {
+  console.log(`🧪 测试 ${method.name}...`);
+  try {
+    const result = method.test();
+    if (result) {
+      setTimeout(() => {
+        // 检查是否成功
+        const script = document.createElement('script');
+        script.textContent = `
+          if (${result}) {
+            console.log('✅ ${method.name} 成功!');
+          } else {
+            console.log('❌ ${method.name} 失败');
+          }
+        `;
+        document.head.appendChild(script);
+        script.remove();
+      }, 100 * (index + 1));
+    }
+  } catch (e) {
+    console.error(`❌ ${method.name} 出错:`, e);
+  }
+});
+
+// 最终兜底方案：直接使用DOM属性
+console.log('🔄 使用DOM属性作为调试接口...');
+document.documentElement.setAttribute('data-gemini-debug-ready', 'true');
+
+// 创建调试接口
+const debugInterface = {
+  getHighlights: function() {
+    const elements = document.querySelectorAll('.gemini-highlight');
+    console.log('🔍 页面高亮元素数量:', elements.length);
+    return elements.length;
+  },
+  triggerContentDebug: function() {
+    document.dispatchEvent(new CustomEvent('GEMINI_DEBUG_CONTENT_SCRIPT'));
+    return 'triggered';
+  }
+};
+
+// 暴露到全局
+window.GEMINI_DEBUG = debugInterface;
+console.log('✅ 调试接口已设置: window.GEMINI_DEBUG');
+console.log('🧪 使用方法: window.GEMINI_DEBUG.getHighlights()');
+console.log('🧪 使用方法: window.GEMINI_DEBUG.triggerContentDebug()');
+
+console.log('🔍 检查函数是否真的设置了...');
+console.log('GEMINI_TIMELINE_TEST 类型:', typeof window.GEMINI_TIMELINE_TEST);
+console.log('debugHighlights 类型:', typeof window.debugHighlights);
+
+// 延迟检查，以防异步问题
+setTimeout(() => {
+  console.log('⏰ 5秒后检查函数状态:');
+  console.log('GEMINI_TIMELINE_TEST 类型:', typeof window.GEMINI_TIMELINE_TEST);
+  console.log('debugHighlights 类型:', typeof window.debugHighlights);
+  
+  // 尝试直接调用测试
+  try {
+    console.log('🧪 尝试直接调用测试函数...');
+    const result = window.GEMINI_TIMELINE_TEST();
+    console.log('✅ 测试函数调用成功:', result);
+  } catch (e) {
+    console.error('❌ 测试函数调用失败:', e);
+  }
+}, 5000);
+
+// 监听来自页面注入脚本的调试请求
+document.addEventListener('GEMINI_DEBUG_CONTENT_SCRIPT', function() {
+  console.log('🔍 Content Script 收到调试请求');
+  
+  try {
+    console.log('📊 Content Script 调试信息:');
+    console.log('highlightData类型:', typeof highlightData);
+    console.log('highlightData大小:', typeof highlightData !== 'undefined' ? highlightData.size : '未定义');
+    
+    if (typeof highlightData !== 'undefined' && highlightData.size > 0) {
+      console.log('所有划线数据:', Array.from(highlightData.entries()));
+    }
+    
+    // 检查问题列表
+    console.log('processedUserMessages类型:', typeof processedUserMessages);
+    console.log('processedUserMessages数量:', typeof processedUserMessages !== 'undefined' ? processedUserMessages.length : '未定义');
+    
+    if (typeof processedUserMessages !== 'undefined' && processedUserMessages && processedUserMessages.length > 0) {
+      processedUserMessages.forEach((msg, index) => {
+        console.log(`问题 ${index + 1} 结构:`, {
+          keys: Object.keys(msg),
+          完整对象: msg
+        });
+      });
+    }
+    
+    // 检查bookmarkedQuestions
+    console.log('bookmarkedQuestions类型:', typeof bookmarkedQuestions);
+    console.log('bookmarkedQuestions大小:', typeof bookmarkedQuestions !== 'undefined' ? bookmarkedQuestions.size : '未定义');
+    
+  } catch (e) {
+    console.error('🚨 Content Script 调试执行错误:', e);
+  }
+});
+
+// 提供替代的调用方式
+console.log('🧪 如果直接调用不行，可以尝试:');
+console.log('document.dispatchEvent(new CustomEvent("GEMINI_DEBUG_REQUEST"))');
+
+// 强制重新设置函数（以防被覆盖）
+setInterval(() => {
+  if (typeof window.debugHighlights === 'undefined') {
+    console.log('🔧 检测到函数丢失，重新设置...');
+    window.debugHighlights = function() {
+      console.log('🔍 调试划线功能 (重新设置版本):');
+      console.log('highlightData类型:', typeof highlightData);
+      console.log('页面高亮元素:', document.querySelectorAll('.gemini-highlight').length);
+    };
+  }
+}, 1000);
+
 // 监听页面加载完成
 window.addEventListener('load', function() {
+  console.log('📄 页面加载完成，调用initPlugin');
   initPlugin();
 });
 
 // 当DOM内容变化时也尝试初始化（针对SPA应用）
 function initPlugin() {
+  console.log('🔧 initPlugin被调用，当前域名:', window.location.hostname);
   // 检查是否在Gemini页面
   if (window.location.hostname === 'gemini.google.com') {
+    console.log('✅ 在Gemini页面，检查初始化状态');
     // 确保只初始化一次
     if (!window.geminiTimelineInitialized) {
+      console.log('🚀 开始初始化Timeline插件');
       window.geminiTimelineInitialized = true;
+      
       // 创建时间线容器
       createTimelineContainer();
       // 改进的初始化时间线
@@ -18,9 +193,15 @@ function initPlugin() {
       observePageChanges();
       // 定期检查更新（以防MutationObserver失效），降低频率
       setInterval(scanQuestions, 10000); // 改为10秒，减少频繁扫描
+    } else {
+      console.log('⚠️ Timeline插件已经初始化过了');
     }
+  } else {
+    console.log('❌ 不在Gemini页面，跳过初始化');
   }
 }
+
+// setupDebugFunctions 函数已移除，调试函数在脚本开头立即设置
 
 // 简化的初始化函数
 async function initializeTimeline() {
@@ -28,6 +209,9 @@ async function initializeTimeline() {
   
   // 初始化标注数据
   await initBookmarks();
+  
+  // 初始化划线功能
+  initHighlightFeature();
   
   // 检查当前页面是否有标注问题
   const currentBookmarks = getCurrentPageBookmarks();
@@ -459,8 +643,24 @@ function createTimelineContainer() {
   
   // 添加备注切换功能
   document.getElementById('notes-toggle').addEventListener('click', function() {
+    console.log('🔍 [notes-toggle] 按钮被点击');
+    console.log('📋 当前filterMode:', filterMode);
+    console.log('📊 bookmarkedQuestions大小:', bookmarkedQuestions.size);
+    
     const wasActive = filterMode === 'notes';
     filterMode = wasActive ? 'all' : 'notes';
+    
+    console.log('📋 新的filterMode:', filterMode);
+    
+    // 检查有多少个有笔记的问题
+    let questionsWithNotes = 0;
+    for (const [id, bookmark] of bookmarkedQuestions) {
+      if (bookmark.note && bookmark.note.trim()) {
+        questionsWithNotes++;
+        console.log(`📝 找到有笔记的问题: ${bookmark.text.substring(0, 30)}... 笔记: ${bookmark.note.substring(0, 30)}...`);
+      }
+    }
+    console.log(`📊 总共有 ${questionsWithNotes} 个问题有笔记`);
     
     // 更新按钮状态
     this.style.opacity = filterMode === 'notes' ? '1' : '0.7';
@@ -673,6 +873,12 @@ function getAllUserQuestions() {
 
 // 生成问题的唯一ID
 function generateQuestionId(questionText, url = window.location.href) {
+  // 安全检查
+  if (!questionText || typeof questionText !== 'string') {
+    console.warn('⚠️ generateQuestionId: questionText无效:', questionText);
+    return 'invalid_question_' + Date.now();
+  }
+  
   // 使用问题文本的前50个字符 + URL的hash部分作为ID
   const textHash = questionText.substring(0, 50).replace(/\s+/g, ' ').trim();
   const urlHash = new URL(url).pathname + new URL(url).search;
@@ -859,7 +1065,120 @@ async function clearAllData() {
 // 导出数据清理函数，供外部调用
 window.geminiTimelineClearAllData = clearAllData;
 
-// 导出调试函数，供外部调用
+// 暂时移除调试函数，稍后重新添加
+
+// 测试划线功能
+window.testHighlight = function(testText = '这是一个测试文本用于测试划线功能') {
+  console.log('🧪 手动测试划线功能');
+  
+  // 创建一个假的范围和选择
+  const range = document.createRange();
+  const textNode = document.createTextNode(testText);
+  document.body.appendChild(textNode);
+  range.selectNodeContents(textNode);
+  
+  // 模拟选择
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  console.log('📋 创建测试选择:', testText);
+  
+  // 直接调用创建划线
+  createHighlight(testText, '这是测试评论', range);
+  
+  // 清理
+  document.body.removeChild(textNode);
+  selection.removeAllRanges();
+  
+  console.log('✅ 测试完成');
+};
+
+// 测试真实划线功能（在当前选择上）
+window.testRealHighlight = function() {
+  console.log('🧪 测试真实选择的划线功能');
+  
+  const selection = window.getSelection();
+  if (!selection.rangeCount || selection.isCollapsed) {
+    console.log('❌ 请先选择一些文本');
+    return;
+  }
+  
+  const selectedText = selection.toString().trim();
+  const range = selection.getRangeAt(0);
+  
+  console.log('📋 使用当前选择:', selectedText.substring(0, 50) + '...');
+  
+  // 直接调用创建划线
+  createHighlight(selectedText, '这是通过测试函数创建的划线', range);
+  
+  console.log('✅ 真实测试完成');
+};
+
+// 强制显示划线菜单（用于测试）
+window.testShowMenu = function() {
+  console.log('🧪 测试显示划线菜单');
+  
+  const selection = window.getSelection();
+  if (!selection.rangeCount || selection.isCollapsed) {
+    console.log('❌ 请先选择一些文本');
+    return;
+  }
+  
+  const selectedText = selection.toString().trim();
+  const range = selection.getRangeAt(0);
+  
+  console.log('📋 使用当前选择显示菜单:', selectedText.substring(0, 50) + '...');
+  
+  // 强制显示菜单
+  showHighlightMenu(100, 100, selectedText, range);
+  
+  console.log('✅ 菜单显示测试完成');
+};
+
+// 在页面中央显示测试菜单（不需要选择文本）
+window.showTestMenu = function() {
+  console.log('🧪 显示测试菜单（页面中央）');
+  
+  // 创建假的range和文本
+  const testText = '这是测试文本';
+  const fakeRange = document.createRange();
+  
+  // 显示在页面中央
+  const centerX = window.innerWidth / 2;
+  const centerY = window.innerHeight / 2;
+  
+  showHighlightMenu(centerX, centerY, testText, fakeRange);
+  
+  console.log('✅ 测试菜单已显示在页面中央');
+};
+
+// 测试特定问题的划线显示
+window.testHighlightInNote = function(questionNumber = 1) {
+  console.log('🧪 测试特定问题的划线显示');
+  
+  // 获取问题ID
+  const messages = processedUserMessages;
+  if (messages.length < questionNumber) {
+    console.log('❌ 问题数量不足');
+    return;
+  }
+  
+  const question = messages[questionNumber - 1];
+  const questionId = generateQuestionId(question.text, window.location.href);
+  
+  console.log('📋 测试问题:', {
+    questionNumber,
+    questionId,
+    questionText: question.text.substring(0, 50) + '...'
+  });
+  
+  // 显示笔记弹窗
+  showNoteModal(questionId, question.text, '这是测试笔记');
+  
+  console.log('✅ 笔记弹窗已显示');
+};
+
 window.debugGlobalView = function() {
   console.log('🔍 调试全局视图数据:');
   console.log('bookmarkedQuestions大小:', bookmarkedQuestions.size);
@@ -889,6 +1208,809 @@ window.debugGlobalView = function() {
     isCurrentPage: url === window.location.href
   })));
 };
+
+// 划线高亮功能
+let highlightData = new Map(); // 存储划线数据 key: highlightId, value: {text, comment, questionId, timestamp}
+let lastSelectionTime = 0; // 防抖用的时间戳
+
+// 初始化划线功能
+function initHighlightFeature() {
+  console.log('🖍️ 初始化划线功能');
+  
+  // 监听文本选择事件
+  document.addEventListener('mouseup', handleTextSelection);
+  document.addEventListener('touchend', handleTextSelection);
+  
+  // 加载已保存的划线数据
+  loadHighlightData();
+}
+
+// 处理文本选择
+function handleTextSelection(event) {
+  const currentTime = Date.now();
+  console.log('🖱️ 文本选择事件触发', {时间: currentTime, 上次时间: lastSelectionTime});
+  
+  // 防抖：500ms内只处理一次
+  if (currentTime - lastSelectionTime < 500) {
+    console.log('⚠️ 防抖：忽略重复触发');
+    return;
+  }
+  lastSelectionTime = currentTime;
+  
+  // 检查是否已有菜单存在，防止重复触发
+  const existingMenu = document.getElementById('highlight-menu');
+  if (existingMenu) {
+    console.log('⚠️ 菜单已存在，忽略此次选择');
+    return;
+  }
+  
+  const selection = window.getSelection();
+  console.log('📋 Selection details:', {
+    rangeCount: selection.rangeCount,
+    isCollapsed: selection.isCollapsed,
+    text: selection.toString()
+  });
+  
+  if (!selection.rangeCount || selection.isCollapsed) {
+    console.log('❌ 没有选择文本或选择已折叠');
+    return; // 没有选择文本
+  }
+  
+  const selectedText = selection.toString().trim();
+  console.log('📝 选择的文本:', selectedText.substring(0, 100) + '...');
+  
+  if (selectedText.length < 5) {
+    console.log('❌ 选择的文本太短:', selectedText.length);
+    return; // 选择的文本太短
+  }
+  
+  // 检查是否选择的是Gemini的回答内容
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const parentElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+  
+  console.log('🔍 检查DOM结构:', {
+    container: container,
+    parentElement: parentElement,
+    parentClasses: parentElement ? parentElement.className : 'N/A',
+    parentTagName: parentElement ? parentElement.tagName : 'N/A'
+  });
+  
+  // 扩展的选择器列表，尝试匹配各种可能的Gemini回答区域
+  const selectors = [
+    '[data-message-author-role="model"]',
+    '[data-message-author-role="assistant"]', 
+    '.model-response',
+    '.assistant-response',
+    '[class*="response"]',
+    '[class*="message"][class*="assistant"]',
+    '[class*="message"][class*="model"]',
+    '[class*="assistant"]',
+    '[class*="ai-response"]',
+    '[role="assistant"]',
+    'article',
+    '.markdown-content',
+    '[class*="content"]'
+  ];
+  
+  let geminiResponse = null;
+  for (const selector of selectors) {
+    geminiResponse = parentElement.closest(selector);
+    if (geminiResponse) {
+      console.log('✅ 找到匹配的回答区域:', selector, geminiResponse);
+      break;
+    }
+  }
+  
+  // 如果没找到特定的回答区域，但文本足够长，也允许划线（可能是新的DOM结构）
+  if (!geminiResponse && selectedText.length >= 10) {
+    console.log('⚠️ 未找到明确的回答区域，但文本较长，允许划线');
+    console.log('🔍 父元素层级结构:');
+    let current = parentElement;
+    let level = 0;
+    while (current && level < 10) {
+      console.log(`  Level ${level}:`, {
+        tagName: current.tagName,
+        className: current.className,
+        id: current.id,
+        attributes: Array.from(current.attributes || []).map(attr => `${attr.name}="${attr.value}"`).join(', ')
+      });
+      current = current.parentElement;
+      level++;
+    }
+  } else if (!geminiResponse) {
+    console.log('❌ 选择的文本不在识别的回答区域内');
+    return;
+  }
+  
+  console.log('🖍️ 检测到有效文本选择:', selectedText.substring(0, 50) + '...');
+  
+  // 显示划线操作菜单
+  showHighlightMenu(event.clientX, event.clientY, selectedText, range);
+}
+
+// 显示划线操作菜单
+function showHighlightMenu(x, y, selectedText, range) {
+  console.log('🎯 showHighlightMenu 被调用:', {
+    x, y, 
+    selectedText: selectedText.substring(0, 50) + '...',
+    rangeValid: !!range
+  });
+  
+  // 移除已存在的菜单
+  const existingMenu = document.getElementById('highlight-menu');
+  if (existingMenu) {
+    console.log('🗑️ 移除已存在的菜单');
+    existingMenu.remove();
+  }
+  
+  console.log('📋 创建新的划线菜单');
+  const menu = document.createElement('div');
+  menu.id = 'highlight-menu';
+  
+  // 计算菜单位置，确保在可见区域内
+  const menuWidth = 250; // 预估菜单宽度
+  const menuHeight = 50; // 预估菜单高度
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  let finalX = x;
+  let finalY = y + 10;
+  
+  // 防止菜单超出右边界
+  if (finalX + menuWidth > viewportWidth) {
+    finalX = viewportWidth - menuWidth - 20;
+  }
+  
+  // 防止菜单超出下边界
+  if (finalY + menuHeight > viewportHeight) {
+    finalY = y - menuHeight - 10; // 显示在选择文本上方
+  }
+  
+  // 防止菜单超出左边界
+  if (finalX < 0) {
+    finalX = 10;
+  }
+  
+  // 防止菜单超出上边界
+  if (finalY < 0) {
+    finalY = 10;
+  }
+  
+  console.log('📍 菜单位置计算:', {
+    原始位置: {x, y},
+    最终位置: {x: finalX, y: finalY},
+    视口大小: {width: viewportWidth, height: viewportHeight}
+  });
+  
+  menu.style.cssText = `
+    position: fixed;
+    top: ${finalY}px;
+    left: ${finalX}px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10000;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    font-size: 14px;
+    min-width: 200px;
+  `;
+  
+  // 划线按钮
+  const highlightBtn = document.createElement('button');
+  highlightBtn.textContent = '🖍️ 划线';
+  highlightBtn.style.cssText = `
+    background: #4285f4;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  `;
+  
+  // 评论按钮
+  const commentBtn = document.createElement('button');
+  commentBtn.textContent = '💬 评论';
+  commentBtn.style.cssText = `
+    background: #34a853;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  `;
+  
+  // 取消按钮
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '✖️';
+  cancelBtn.style.cssText = `
+    background: #ea4335;
+    color: white;
+    border: none;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  `;
+  
+  // 事件处理
+  highlightBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('🖍️ 划线按钮被点击');
+    createHighlight(selectedText, '', range);
+    menu.remove();
+    window.getSelection().removeAllRanges();
+  });
+  
+  commentBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('💬 评论按钮被点击');
+    showHighlightCommentModal(selectedText, range);
+    menu.remove();
+  });
+  
+  cancelBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('✖️ 取消按钮被点击');
+    menu.remove();
+    window.getSelection().removeAllRanges();
+  });
+  
+  menu.appendChild(highlightBtn);
+  menu.appendChild(commentBtn);
+  menu.appendChild(cancelBtn);
+  
+  console.log('📋 将菜单添加到页面:', menu);
+  document.body.appendChild(menu);
+  
+  console.log('✅ 菜单已添加到页面，当前菜单元素:', document.getElementById('highlight-menu'));
+  
+  // 点击其他地方关闭菜单
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        console.log('🗑️ 点击外部，关闭菜单');
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 100);
+  
+  // 自动关闭菜单（10秒后）
+  setTimeout(() => {
+    if (document.getElementById('highlight-menu')) {
+      console.log('⏰ 菜单自动关闭');
+      menu.remove();
+    }
+  }, 10000);
+}
+
+// 显示划线评论弹窗
+function showHighlightCommentModal(selectedText, range) {
+  const modal = document.createElement('div');
+  modal.id = 'highlight-comment-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  `;
+  
+  content.innerHTML = `
+    <h3 style="margin: 0 0 16px 0; color: #333; font-size: 18px;">🖍️ 添加划线和评论</h3>
+    
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">选中的文本：</label>
+      <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 4px solid #4285f4; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
+        ${selectedText}
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label for="highlight-comment" style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">💬 评论（可选）：</label>
+      <textarea id="highlight-comment" placeholder="为什么觉得这段内容好？添加你的想法..." style="
+        width: 100%;
+        min-height: 100px;
+        padding: 12px;
+        border: 2px solid #e1e5e9;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        box-sizing: border-box;
+      "></textarea>
+    </div>
+    
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button id="highlight-cancel" style="
+        background: #f8f9fa;
+        color: #5f6368;
+        border: 1px solid #dadce0;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">取消</button>
+      <button id="highlight-save" style="
+        background: #4285f4;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">保存划线</button>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  // 聚焦到评论框
+  const commentInput = document.getElementById('highlight-comment');
+  commentInput.focus();
+  
+  // 事件处理
+  document.getElementById('highlight-cancel').addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('❌ 取消划线按钮被点击');
+    modal.remove();
+    window.getSelection().removeAllRanges();
+  });
+  
+  document.getElementById('highlight-save').addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('💾 保存划线按钮被点击');
+    
+    const comment = commentInput.value.trim();
+    console.log('📝 评论内容:', comment);
+    
+    await createHighlight(selectedText, comment, range);
+    modal.remove();
+    window.getSelection().removeAllRanges();
+  });
+  
+  // 点击背景关闭
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.remove();
+      window.getSelection().removeAllRanges();
+    }
+  };
+}
+
+// 创建划线
+async function createHighlight(text, comment, range) {
+  console.log('🖍️ 开始创建划线:', { text: text.substring(0, 50) + '...', comment: comment || '无评论' });
+  
+  const highlightId = generateHighlightId(text);
+  const questionId = findRelatedQuestionId(range);
+  
+  const highlightInfo = {
+    id: highlightId,
+    text: text,
+    comment: comment,
+    questionId: questionId,
+    timestamp: Date.now(),
+    url: window.location.href,
+    expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7天过期
+  };
+  
+  console.log('📊 划线信息:', highlightInfo);
+  
+  // 存储到内存
+  highlightData.set(highlightId, highlightInfo);
+  console.log('💾 已存储到内存，当前划线数量:', highlightData.size);
+  
+  // 保存到存储
+  await saveHighlightData();
+  
+  // 🔥 重要：自动创建对应的笔记记录，统一划线和笔记功能
+  console.log('🔄 自动为划线创建笔记记录...');
+  try {
+    // 检查是否已有该问题的笔记
+    const existingBookmark = bookmarkedQuestions.get(questionId);
+    let noteText = existingBookmark ? existingBookmark.note || '' : '';
+    
+    // 直接将划线文本作为笔记内容，评论作为说明
+    const highlightNote = comment ? `${text}\n\n💬 ${comment}` : text;
+    noteText = noteText ? `${noteText}\n\n${highlightNote}` : highlightNote;
+    
+    // 获取问题文本
+    const questionText = processedUserMessages.length > 0 ? 
+      processedUserMessages[processedUserMessages.length - 1].text || '未知问题' : '未知问题';
+    
+    // 保存统一的笔记记录
+    await saveBookmark(questionId, questionText, noteText);
+    console.log('✅ 已自动创建笔记记录');
+  } catch (e) {
+    console.error('❌ 创建笔记记录失败:', e);
+  }
+  
+  // 在页面上高亮显示
+  highlightTextInDOM(range, highlightId);
+  
+  console.log('✅ 划线创建成功:', {
+    text: text.substring(0, 50) + '...',
+    comment: comment || '无评论',
+    questionId: questionId,
+    highlightId: highlightId
+  });
+  
+  showToast(`划线已保存${comment ? '并添加评论' : ''}`, 'success');
+}
+
+// 生成划线ID
+function generateHighlightId(text) {
+  const timestamp = Date.now();
+  const textHash = text.substring(0, 30).replace(/\s+/g, '');
+  return btoa(encodeURIComponent(textHash + timestamp)).replace(/[+/=]/g, '');
+}
+
+// 查找相关的问题ID
+function findRelatedQuestionId(range) {
+  console.log('🔍 查找相关问题ID');
+  
+  // 直接使用processedUserMessages，它包含正确的数据结构
+  console.log('📋 processedUserMessages数量:', processedUserMessages.length);
+  
+  if (processedUserMessages.length > 0) {
+    // 返回最后一个问题的ID（通常是当前对话中最新的问题）
+    const lastQuestion = processedUserMessages[processedUserMessages.length - 1];
+    
+    // 安全检查
+    console.log('📊 lastQuestion结构:', {
+      text: lastQuestion.text ? lastQuestion.text.substring(0, 30) + '...' : 'undefined',
+      keys: Object.keys(lastQuestion),
+      完整对象: lastQuestion
+    });
+    
+    // 尝试多种可能的文本字段
+    const questionText = lastQuestion.text || 
+                        lastQuestion.content || 
+                        lastQuestion.textContent || 
+                        lastQuestion.innerText ||
+                        (lastQuestion.element ? lastQuestion.element.textContent : null) ||
+                        '未知问题';
+    const questionId = generateQuestionId(questionText, window.location.href);
+    console.log('✅ 使用问题ID:', questionId.substring(0, 30) + '...', '来自问题:', questionText.substring(0, 50) + '...');
+    return questionId;
+  }
+  
+  console.log('❌ 没有找到问题，返回unknown_question');
+  return 'unknown_question';
+}
+
+// 在DOM中高亮文本
+function highlightTextInDOM(range, highlightId) {
+  try {
+    console.log('🎨 开始在DOM中高亮文本:', highlightId);
+    
+    const span = document.createElement('span');
+    span.style.cssText = `
+      background: rgba(255, 235, 59, 0.6) !important;
+      border-bottom: 2px solid #ffc107 !important;
+      cursor: pointer !important;
+      position: relative !important;
+      padding: 2px 4px !important;
+      border-radius: 3px !important;
+      box-shadow: 0 1px 3px rgba(255, 193, 7, 0.3) !important;
+    `;
+    span.dataset.highlightId = highlightId;
+    span.title = '🖍️ 点击查看划线详情';
+    span.className = 'gemini-highlight';
+    
+    // 点击事件
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      console.log('🖍️ 高亮文本被点击:', highlightId);
+      showHighlightDetails(highlightId);
+    });
+    
+    // 悬停效果
+    span.addEventListener('mouseenter', () => {
+      span.style.background = 'rgba(255, 235, 59, 0.8) !important';
+    });
+    
+    span.addEventListener('mouseleave', () => {
+      span.style.background = 'rgba(255, 235, 59, 0.6) !important';
+    });
+    
+    range.surroundContents(span);
+    console.log('✅ 文本已在页面高亮显示，元素:', span);
+  } catch (error) {
+    console.warn('⚠️ 无法在页面高亮显示文本:', error);
+    console.warn('Range details:', range);
+    
+    // 尝试备用方法
+    try {
+      const contents = range.extractContents();
+      const span = document.createElement('span');
+      span.style.cssText = `
+        background: rgba(255, 235, 59, 0.6) !important;
+        border-bottom: 2px solid #ffc107 !important;
+        cursor: pointer !important;
+        padding: 2px 4px !important;
+        border-radius: 3px !important;
+      `;
+      span.dataset.highlightId = highlightId;
+      span.title = '🖍️ 点击查看划线详情';
+      span.className = 'gemini-highlight';
+      
+      span.appendChild(contents);
+      range.insertNode(span);
+      
+      span.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showHighlightDetails(highlightId);
+      });
+      
+      console.log('✅ 使用备用方法高亮显示成功');
+    } catch (backupError) {
+      console.error('❌ 备用高亮方法也失败:', backupError);
+    }
+  }
+}
+
+// 显示划线详情
+function showHighlightDetails(highlightId) {
+  const highlight = highlightData.get(highlightId);
+  if (!highlight) {
+    console.warn('未找到划线数据:', highlightId);
+    return;
+  }
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+  
+  const content = document.createElement('div');
+  content.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  `;
+  
+  const timeStr = new Date(highlight.timestamp).toLocaleString('zh-CN');
+  
+  content.innerHTML = `
+    <h3 style="margin: 0 0 16px 0; color: #333; font-size: 18px;">🖍️ 划线详情</h3>
+    
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">划线内容：</label>
+      <div style="background: #fff3e0; padding: 12px; border-radius: 6px; border-left: 4px solid #ff9800; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
+        ${highlight.text}
+      </div>
+    </div>
+    
+    ${highlight.comment ? `
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">💬 评论：</label>
+      <div style="background: #e8f5e8; padding: 12px; border-radius: 6px; border-left: 4px solid #4caf50; font-size: 14px; line-height: 1.5;">
+        ${highlight.comment}
+      </div>
+    </div>
+    ` : ''}
+    
+    <div style="margin-bottom: 20px; font-size: 12px; color: #666;">
+      创建时间：${timeStr}
+    </div>
+    
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button id="highlight-delete" style="
+        background: #ea4335;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">删除</button>
+      <button id="highlight-close" style="
+        background: #4285f4;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">关闭</button>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  // 事件处理
+  document.getElementById('highlight-close').onclick = () => modal.remove();
+  document.getElementById('highlight-delete').onclick = () => {
+    if (confirm('确定要删除这个划线吗？')) {
+      deleteHighlight(highlightId);
+      modal.remove();
+    }
+  };
+  
+  // 点击背景关闭
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+}
+
+// 删除划线
+function deleteHighlight(highlightId) {
+  highlightData.delete(highlightId);
+  saveHighlightData();
+  
+  // 从DOM中移除高亮
+  const highlightElement = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+  if (highlightElement) {
+    const parent = highlightElement.parentNode;
+    parent.replaceChild(document.createTextNode(highlightElement.textContent), highlightElement);
+    parent.normalize();
+  }
+  
+  showToast('划线已删除', 'success');
+}
+
+// 保存划线数据
+async function saveHighlightData() {
+  try {
+    const highlightObj = Object.fromEntries(highlightData);
+    await chrome.storage.local.set({ highlightData: highlightObj });
+    console.log('✅ 划线数据已保存');
+  } catch (error) {
+    console.error('❌ 保存划线数据失败:', error);
+  }
+}
+
+// 加载划线数据
+async function loadHighlightData() {
+  try {
+    const result = await chrome.storage.local.get(['highlightData']);
+    if (result.highlightData) {
+      highlightData = new Map(Object.entries(result.highlightData));
+      console.log('✅ 加载了', highlightData.size, '个划线记录');
+      
+      // 清理过期的划线
+      cleanExpiredHighlights();
+    }
+  } catch (error) {
+    console.error('❌ 加载划线数据失败:', error);
+  }
+}
+
+// 清理过期的划线
+async function cleanExpiredHighlights() {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const [id, highlight] of highlightData) {
+    if (highlight.expiresAt && now > highlight.expiresAt) {
+      highlightData.delete(id);
+      cleanedCount++;
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    await saveHighlightData();
+    console.log(`🧹 清理了 ${cleanedCount} 个过期的划线记录`);
+  }
+}
+
+// 获取问题相关的划线内容（用于笔记弹窗显示）
+function getHighlightsForQuestion(questionId) {
+  console.log('🔍 [getHighlightsForQuestion] 被调用');
+  console.log('📋 查找的questionId:', questionId);
+  console.log('📊 highlightData大小:', highlightData.size);
+  
+  if (highlightData.size === 0) {
+    console.log('❌ highlightData为空，没有任何划线数据');
+    return '';
+  }
+  
+  console.log('📝 所有划线数据:');
+  for (const [highlightId, highlight] of highlightData) {
+    console.log(`  - 划线ID: ${highlightId.substring(0, 30)}...`);
+    console.log(`    问题ID: ${highlight.questionId.substring(0, 30)}...`);
+    console.log(`    文本: ${highlight.text.substring(0, 30)}...`);
+    console.log(`    匹配? ${highlight.questionId === questionId ? '✅' : '❌'}`);
+  }
+  
+  const relatedHighlights = [];
+  
+  for (const [id, highlight] of highlightData) {
+    if (highlight.questionId === questionId) {
+      console.log('✅ 找到匹配的划线:', {
+        highlightId: id.substring(0, 20) + '...',
+        text: highlight.text.substring(0, 50) + '...'
+      });
+      relatedHighlights.push(highlight);
+    }
+  }
+  
+  console.log(`📊 最终结果：找到 ${relatedHighlights.length} 个相关划线`);
+  
+  if (relatedHighlights.length === 0) {
+    console.log('❌ 没有找到相关划线，返回空字符串');
+    return '';
+  }
+  
+  // 按时间排序
+  relatedHighlights.sort((a, b) => b.timestamp - a.timestamp);
+  
+  const highlightsHtml = relatedHighlights.map(highlight => {
+    const timeStr = new Date(highlight.timestamp).toLocaleString('zh-CN');
+    return `
+      <div style="margin-bottom: 12px; padding: 12px; background: #fff8e1; border-left: 4px solid #ffc107; border-radius: 6px;">
+        <div style="font-size: 12px; color: #666; margin-bottom: 6px;">🖍️ 划线内容 - ${timeStr}</div>
+        <div style="font-size: 14px; color: #333; margin-bottom: 8px; line-height: 1.4; background: rgba(255, 235, 59, 0.2); padding: 8px; border-radius: 4px;">
+          ${highlight.text}
+        </div>
+        ${highlight.comment ? `
+          <div style="font-size: 13px; color: #555; padding: 8px; background: #f0f8f0; border-radius: 4px; border-left: 3px solid #4caf50;">
+            <strong>💬 评论：</strong>${highlight.comment}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #333; font-weight: 500;">
+        🖍️ 相关划线 (${relatedHighlights.length}个)：
+      </label>
+      <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px;">
+        ${highlightsHtml}
+      </div>
+    </div>
+  `;
+}
 
 // 渲染全局视图
 async function renderGlobalView(filterType = 'all') {
@@ -1639,6 +2761,14 @@ function showBookmarkNotification(count) {
 
 // 显示备注编辑弹窗
 function showNoteModal(questionId, questionText, currentNote = '', readOnly = false) {
+  console.log('🔍 [showNoteModal] 被调用');
+  console.log('📋 参数:', {
+    questionId: questionId.substring(0, 30) + '...',
+    questionText: questionText.substring(0, 50) + '...',
+    currentNote: currentNote ? currentNote.substring(0, 30) + '...' : '无',
+    readOnly
+  });
+  
   // 移除现有的弹窗
   const existingModal = document.getElementById('note-modal');
   if (existingModal) {
@@ -1683,6 +2813,8 @@ function showNoteModal(questionId, questionText, currentNote = '', readOnly = fa
       </div>
       ${readOnly ? '<div style="font-size: 11px; color: #999; margin-top: 4px;">🌐 全局视图 - 只读模式</div>' : ''}
     </div>
+    
+    <!-- 划线内容已统一到笔记中，不需要单独显示 -->
     
     <div style="margin-bottom: 20px;">
       <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #333; font-weight: 500;">
@@ -2310,10 +3442,10 @@ function updateQuestionCount(visible, total) {
       countElement.textContent = `${visible} 个笔记`;
     } else {
       // 普通视图 - 简化计数显示，不显示标注统计
-      if (visible === total) {
-        countElement.textContent = `${total} 个问题`;
-      } else {
-        countElement.textContent = `${visible}/${total} 个问题`;
+    if (visible === total) {
+      countElement.textContent = `${total} 个问题`;
+    } else {
+      countElement.textContent = `${visible}/${total} 个问题`;
       }
     }
   }
@@ -2379,20 +3511,20 @@ function scanQuestions() {
       
       if (elements.length > 0) {
         // 如果找到了容器级别的元素，优先使用这些
-        elements.forEach(el => {
-          const text = el.textContent?.trim() || '';
-          
+      elements.forEach(el => {
+        const text = el.textContent?.trim() || '';
+        
           // 过滤系统错误和空内容
-          const isSystemError = 
-            text.includes('Request ID:') ||
-            text.includes('ConnectError:') ||
-            text.includes('socket hang up') ||
-            text.includes('vscode-file://') ||
-            text.includes('at iol.$') ||
-            text.includes('at Zhr._');
-          
+        const isSystemError = 
+          text.includes('Request ID:') ||
+          text.includes('ConnectError:') ||
+          text.includes('socket hang up') ||
+          text.includes('vscode-file://') ||
+          text.includes('at iol.$') ||
+          text.includes('at Zhr._');
+        
           if (!isSystemError && text.length > 10) { // 至少10个字符才算有效问题
-            console.log(`Gemini Timeline: ✅ 找到完整问题容器: "${text.substring(0, 100)}..."`);
+           
             foundContainers.push({
               element: el,
               text: text,
@@ -2491,9 +3623,9 @@ function scanQuestions() {
         element: container.element
       });
       processedQuestions.push(container.element);
-      console.log(`Gemini Timeline: ✅ 添加问题: "${shortFingerprint}..."`);
+      //console.log(`Gemini Timeline: ✅ 添加问题: "${shortFingerprint}..."`);
     } else {
-      console.log(`Gemini Timeline: ❌ 跳过重复/子集问题: "${shortFingerprint}..."`);
+      //跳过问题的日志
     }
   });
   
@@ -2514,7 +3646,7 @@ function scanQuestions() {
   if (currentViewMode === 'global') {
     renderGlobalView(getCurrentFilterMode());
   } else {
-    renderTimeline(userMessages);
+  renderTimeline(userMessages);
   }
 }
 
@@ -2569,7 +3701,7 @@ function renderTimeline(userMessages) {
       finalQuestions.push(message);
     }
   });
-  
+
   // 简单的文本相似度计算函数
   function calculateTextSimilarity(text1, text2) {
     if (text1 === text2) return 1;
@@ -2725,7 +3857,9 @@ function renderTimeline(userMessages) {
       // 笔记按钮点击事件 - 直接弹出编辑框
       noteButton.addEventListener('click', async (e) => {
         e.stopPropagation();
-        console.log('笔记按钮被点击:', questionId, questionText);
+        console.log('🔥🔥🔥 问题条目的笔记按钮被点击了！🔥🔥🔥');
+        console.log('📋 问题ID:', questionId);
+        console.log('📋 问题文本:', questionText);
         showNoteModal(questionId, questionText, noteText);
       });
       
@@ -2742,7 +3876,7 @@ function renderTimeline(userMessages) {
         this.style.borderColor = '#667eea';
       });
       
-      console.log('添加笔记按钮到问题:', index + 1, noteButton);
+    
       
       // 按顺序添加：五角星 -> 笔记按钮 -> 问题文本
       questionContent.appendChild(bookmarkButton);
@@ -3001,3 +4135,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 保持消息通道开放，等待异步响应
   }
 });
+
+// 调试函数已在 setupDebugFunctions() 中设置
