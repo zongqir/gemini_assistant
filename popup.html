@@ -45,6 +45,28 @@
       font-size: 12px;
       color: #999;
     }
+    .button {
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 8px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .button:hover {
+      background: #e0e0e0;
+    }
+    .button.danger {
+      background: #ffe6e6;
+      border-color: #ffcccc;
+      color: #cc0000;
+    }
+    .button.danger:hover {
+      background: #ffcccc;
+    }
   </style>
 </head>
 <body>
@@ -56,12 +78,41 @@
     <div class="feature-item">显示问题时间线侧边栏</div>
     <div class="feature-item">点击问题快速跳转</div>
     <div class="feature-item">⭐ 标注重要问题并置顶显示</div>
+    <div class="feature-item">📝 记录笔记内容</div>
     <div class="feature-item">跨页面访问之前标注的问题</div>
     <div class="feature-item">支持长对话的完整历史记录</div>
   </div>
   
+  <button id="clearDataBtn" class="button danger">清除所有数据</button>
+  
   <div class="footer">
-    版本: 1.0
+    版本: 1.1 | 数据存储已优化
   </div>
+  
+  <script>
+    document.getElementById('clearDataBtn').addEventListener('click', async function() {
+      if (confirm('确定要清除所有标注和笔记数据吗？此操作不可恢复！')) {
+        try {
+          // 获取当前活动标签页
+          const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+          
+          // 向内容脚本发送清理数据的消息
+          chrome.tabs.sendMessage(tab.id, {action: 'clearAllData'}, function(response) {
+            if (chrome.runtime.lastError) {
+              // 如果内容脚本不可用，直接清理存储
+              chrome.storage.local.clear();
+              chrome.storage.sync.clear();
+            }
+            alert('所有数据已清除！');
+          });
+        } catch (error) {
+          // 备用清理方法
+          chrome.storage.local.clear();
+          chrome.storage.sync.clear();
+          alert('所有数据已清除！');
+        }
+      }
+    });
+  </script>
 </body>
 </html>

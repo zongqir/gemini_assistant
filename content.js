@@ -115,7 +115,7 @@ function createTimelineContainer() {
   sidebar.style.cssText = `
     position: fixed;
     top: 50%;
-    right: -280px;
+    right: -290px;
     transform: translateY(-50%);
     width: 320px;
     max-height: 80vh;
@@ -138,10 +138,10 @@ function createTimelineContainer() {
   dockIndicator.id = 'timeline-dock-indicator';
   dockIndicator.style.cssText = `
     position: absolute;
-    left: -8px;
+    left: -1px;
     top: 50%;
     transform: translateY(-50%);
-    width: 8px;
+    width: 1px;
     height: 40px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: 4px 0 0 4px;
@@ -220,7 +220,7 @@ function createTimelineContainer() {
   const updateHintText = () => {
     const notesToggle = document.getElementById('notes-toggle');
     if (notesToggle && notesToggle.style.opacity === '1') {
-      hintText.innerHTML = '💡 在普通界面长按标注3秒可快速编辑笔记';
+      hintText.innerHTML = '💡 点击📝按钮直接编辑笔记';
     } else {
       hintText.textContent = '⭐ 标注问题将在7天后自动清理';
     }
@@ -260,9 +260,25 @@ function createTimelineContainer() {
     const searchContainer = sidebar.children[1]; // 搜索容器
     const isCollapsed = content.style.display === 'none';
     
-    content.style.display = isCollapsed ? 'block' : 'none';
-    searchContainer.style.display = isCollapsed ? 'block' : 'none';
-    this.textContent = isCollapsed ? '−' : '+';
+    if (isCollapsed) {
+      // 展开：显示内容和搜索框
+      content.style.display = 'block';
+      searchContainer.style.display = 'block';
+      this.textContent = '−';
+      this.title = '最小化时间线';
+      
+      // 恢复正常高度
+      sidebar.style.maxHeight = '80vh';
+    } else {
+      // 最小化：只隐藏内容和搜索框，保留标题栏
+      content.style.display = 'none';
+      searchContainer.style.display = 'none';
+      this.textContent = '+';
+      this.title = '展开时间线';
+      
+      // 调整高度为仅显示标题栏
+      sidebar.style.maxHeight = '60px';
+    }
   });
 
   // 筛选状态变量
@@ -282,10 +298,8 @@ function createTimelineContainer() {
     notesButton.style.opacity = '0.7';
     notesButton.title = '只显示有笔记的问题';
     
-    // 重新渲染时间线
-    const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-      .filter(el => el.textContent?.trim().length > 0);
-    renderTimeline(userMessages);
+    // 重新渲染时间线 - 使用已处理的问题列表
+    renderTimeline(processedUserMessages);
   });
   
   // 添加备注切换功能
@@ -302,10 +316,8 @@ function createTimelineContainer() {
     bookmarksButton.style.opacity = '0.7';
     bookmarksButton.title = '只显示标注问题';
     
-    // 重新渲染时间线
-    const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-      .filter(el => el.textContent?.trim().length > 0);
-    renderTimeline(userMessages);
+    // 重新渲染时间线 - 使用已处理的问题列表
+    renderTimeline(processedUserMessages);
   });
 
   // 添加搜索功能
@@ -321,6 +333,7 @@ function createTimelineContainer() {
 // 全局变量
 let allQuestions = [];
 let lastScanTime = 0;
+let processedUserMessages = []; // 保存处理后的用户问题列表
 const SCAN_COOLDOWN = 1000; // 1秒冷却时间，避免过于频繁的扫描
 let lastQuestionEl = null;
 
@@ -331,16 +344,33 @@ let bookmarkedQuestions = new Map(); // 存储标注的问题 key: questionId, v
 // 初始化标注数据
 async function initBookmarks() {
   try {
-    const result = await chrome.storage.sync.get(['bookmarkedQuestions']);
+    // 先测试存储是否正常工作
+    console.log('测试Chrome存储功能...');
+    const testKey = 'gemini_timeline_test_' + Date.now();
+    await chrome.storage.local.set({ [testKey]: 'test_value' });
+    const testResult = await chrome.storage.local.get([testKey]);
+    await chrome.storage.local.remove([testKey]);
+    
+    if (testResult[testKey] === 'test_value') {
+      console.log('✅ Chrome存储功能正常');
+    } else {
+      throw new Error('存储测试失败');
+    }
+    
+    const result = await chrome.storage.local.get(['bookmarkedQuestions']);
     if (result.bookmarkedQuestions) {
       bookmarkedQuestions = new Map(Object.entries(result.bookmarkedQuestions));
       console.log('Gemini Timeline: 加载了', bookmarkedQuestions.size, '个标注问题');
       
       // 清理过期的标注
       await cleanExpiredBookmarks();
+    } else {
+      console.log('Gemini Timeline: 无历史标注数据');
     }
   } catch (error) {
-    console.error('Gemini Timeline: 加载标注数据失败:', error);
+    console.error('❌ Gemini Timeline: 初始化失败:', error);
+    // 显示错误提示给用户
+    showToast(`存储初始化失败: ${error.message}`, 'error');
   }
 }
 
@@ -371,7 +401,7 @@ async function cleanExpiredBookmarks() {
       
       // 更新存储
       const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
-      await chrome.storage.sync.set({ bookmarkedQuestions: bookmarksObj });
+      await chrome.storage.local.set({ bookmarkedQuestions: bookmarksObj });
       
       console.log(`Gemini Timeline: 清理了 ${cleanedCount} 个过期标注`);
     }
@@ -381,6 +411,50 @@ async function cleanExpiredBookmarks() {
     console.error('Gemini Timeline: 清理过期标注失败:', error);
     return 0;
   }
+}
+
+// 强制清理过期和多余的标注数据（配额超限时使用）
+async function forceCleanExpiredBookmarks() {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  // 1. 清理所有过期数据
+  const expiredIds = [];
+  for (const [questionId, bookmark] of bookmarkedQuestions) {
+    if (!bookmark.expiresAt) {
+      bookmark.expiresAt = bookmark.timestamp + (7 * 24 * 60 * 60 * 1000);
+    }
+    if (now > bookmark.expiresAt) {
+      expiredIds.push(questionId);
+      cleanedCount++;
+    }
+  }
+  
+  expiredIds.forEach(id => bookmarkedQuestions.delete(id));
+  
+  // 2. 如果仍然太多，按时间顺序清理旧数据，只保留最近50个
+  const bookmarksArray = Array.from(bookmarkedQuestions.entries());
+  if (bookmarksArray.length > 50) {
+    // 按创建时间排序，保留最新的50个
+    bookmarksArray.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+    
+    // 清空原Map，只保留前50个
+    bookmarkedQuestions.clear();
+    for (let i = 0; i < Math.min(50, bookmarksArray.length); i++) {
+      bookmarkedQuestions.set(bookmarksArray[i][0], bookmarksArray[i][1]);
+    }
+    cleanedCount += bookmarksArray.length - 50;
+  }
+  
+  // 3. 进一步优化：移除超长的笔记内容
+  for (const [questionId, bookmark] of bookmarkedQuestions) {
+    if (bookmark.note && bookmark.note.length > 200) {
+      bookmark.note = bookmark.note.substring(0, 200) + '...';
+      cleanedCount++;
+    }
+  }
+  
+  console.log(`Gemini Timeline: 强制清理完成，清理了 ${cleanedCount} 项数据`);
 }
 
 // 生成问题的唯一ID
@@ -406,7 +480,7 @@ async function saveBookmark(questionId, questionText, note = '', url = window.lo
     
     // 转换Map为对象以便存储
     const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
-    await chrome.storage.sync.set({ bookmarkedQuestions: bookmarksObj });
+        await chrome.storage.local.set({ bookmarkedQuestions: bookmarksObj });
     console.log('Gemini Timeline: 保存标注成功:', questionText.substring(0, 30));
     return true;
   } catch (error) {
@@ -415,24 +489,83 @@ async function saveBookmark(questionId, questionText, note = '', url = window.lo
   }
 }
 
+// 检查存储权限
+async function checkStoragePermissions() {
+  try {
+    // 测试storage.local权限
+    await chrome.storage.local.get(['test']);
+    console.log('storage.local 权限正常');
+    return true;
+  } catch (error) {
+    console.error('storage.local 权限异常:', error);
+    return false;
+  }
+}
+
 // 更新标注笔记
 async function updateBookmarkNote(questionId, note) {
+  console.log('updateBookmarkNote 开始执行:', { questionId, noteLength: note.length });
+  
+  // 首先检查存储权限
+  const hasPermissions = await checkStoragePermissions();
+  if (!hasPermissions) {
+    return { success: false, error: 'Chrome存储权限异常，请重新安装扩展' };
+  }
+  
   try {
     const bookmark = bookmarkedQuestions.get(questionId);
-    if (bookmark) {
-      bookmark.note = note;
-      bookmarkedQuestions.set(questionId, bookmark);
-      
-      // 转换Map为对象以便存储
-      const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
-      await chrome.storage.sync.set({ bookmarkedQuestions: bookmarksObj });
-      console.log('Gemini Timeline: 更新笔记成功:', note.substring(0, 30));
-      return true;
+    console.log('获取到的bookmark:', bookmark);
+    
+    if (!bookmark) {
+      console.warn('标注不存在，尝试创建新标注');
+      // 如果标注不存在，先创建标注
+      const success = await saveBookmark(questionId, '临时问题文本', note);
+      if (success) {
+        return { success: true, message: '已创建新标注并保存笔记' };
+      } else {
+        return { success: false, error: '无法创建标注' };
+      }
     }
-    return false;
+    
+    // 更新笔记
+    bookmark.note = note;
+    bookmarkedQuestions.set(questionId, bookmark);
+    console.log('内存中已更新笔记');
+    
+    // 转换Map为对象以便存储
+    const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
+    console.log('准备保存到存储，数据大小:', JSON.stringify(bookmarksObj).length);
+    
+    try {
+      await chrome.storage.local.set({ bookmarkedQuestions: bookmarksObj });
+      console.log('Gemini Timeline: 更新笔记成功:', note.substring(0, 30));
+      return { success: true, message: '笔记保存成功' };
+    } catch (storageError) {
+      console.error('存储错误详情:', storageError);
+      
+      if (storageError.message.includes('quota exceeded') || storageError.message.includes('Quota')) {
+        console.warn('Gemini Timeline: 存储配额超限，正在清理过期数据...');
+        
+        // 强制清理过期数据
+        await forceCleanExpiredBookmarks();
+        
+        // 重新尝试保存
+        try {
+          const cleanedBookmarksObj = Object.fromEntries(bookmarkedQuestions);
+          await chrome.storage.local.set({ bookmarkedQuestions: cleanedBookmarksObj });
+          console.log('Gemini Timeline: 清理后重新保存成功');
+          return { success: true, message: '清理后保存成功' };
+        } catch (retryError) {
+          console.error('Gemini Timeline: 清理后仍然保存失败:', retryError);
+          return { success: false, error: `清理后仍失败: ${retryError.message}` };
+        }
+      } else {
+        return { success: false, error: `存储错误: ${storageError.message}` };
+      }
+    }
   } catch (error) {
     console.error('Gemini Timeline: 更新笔记失败:', error);
-    return false;
+    return { success: false, error: `更新失败: ${error.message}` };
   }
 }
 
@@ -443,7 +576,7 @@ async function removeBookmark(questionId) {
     
     // 转换Map为对象以便存储
     const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
-    await chrome.storage.sync.set({ bookmarkedQuestions: bookmarksObj });
+        await chrome.storage.local.set({ bookmarkedQuestions: bookmarksObj });
     console.log('Gemini Timeline: 移除标注成功:', questionId);
     return true;
   } catch (error) {
@@ -451,6 +584,39 @@ async function removeBookmark(questionId) {
     return false;
   }
 }
+
+// 彻底清理所有数据（用于插件卸载或重置）
+async function clearAllData() {
+  try {
+    // 清空内存中的数据
+    bookmarkedQuestions.clear();
+    
+    // 清空本地存储中的所有相关数据
+    await chrome.storage.local.remove([
+      'bookmarkedQuestions',
+      'isTimelineEnabled', 
+      'timelinePosition', 
+      'timelineWidth'
+    ]);
+    
+    // 也清理可能残留的sync数据
+    await chrome.storage.sync.remove([
+      'bookmarkedQuestions',
+      'isTimelineEnabled', 
+      'timelinePosition', 
+      'timelineWidth'
+    ]);
+    
+    console.log('Gemini Timeline: 所有数据已清理');
+    return true;
+  } catch (error) {
+    console.error('Gemini Timeline: 清理数据失败:', error);
+    return false;
+  }
+}
+
+// 导出数据清理函数，供外部调用
+window.geminiTimelineClearAllData = clearAllData;
 
 // 检查问题是否已标注
 function isBookmarked(questionId) {
@@ -538,10 +704,8 @@ function showBookmarkNotification(count) {
       bookmarksToggle.style.opacity = '1';
       bookmarksToggle.title = '显示所有问题';
       
-      // 重新渲染时间线，只显示标注问题
-      const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-        .filter(el => el.textContent?.trim().length > 0);
-      renderTimeline(userMessages);
+      // 重新渲染时间线，只显示标注问题 - 使用已处理的问题列表
+      renderTimeline(processedUserMessages);
     }
     
     // 移除通知
@@ -615,6 +779,9 @@ function showNoteModal(questionId, questionText, currentNote = '') {
       <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #333;">记录笔记内容</h3>
       <div style="font-size: 14px; color: #666; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis;">
         ${questionText.substring(0, 150)}${questionText.length > 150 ? '...' : ''}
+      </div>
+      <div style="font-size: 11px; color: #999; margin-top: 4px;">
+        调试信息: ID=${questionId.substring(0, 8)}... | 标注数=${bookmarkedQuestions.size}
       </div>
     </div>
     
@@ -735,20 +902,31 @@ function showNoteModal(questionId, questionText, currentNote = '') {
   // 保存备注
   saveBtn.addEventListener('click', async () => {
     const note = noteInput.value.trim();
-    const success = await updateBookmarkNote(questionId, note);
+    console.log('开始保存笔记:', {
+      questionId,
+      noteLength: note.length,
+      currentBookmarksSize: bookmarkedQuestions.size
+    });
     
-    if (success) {
-      // 重新渲染时间线以显示更新后的备注
-      const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-        .filter(el => el.textContent?.trim().length > 0);
-      renderTimeline(userMessages);
+    try {
+      const result = await updateBookmarkNote(questionId, note);
+      console.log('保存结果:', result);
       
-      closeModal();
-      
-      // 显示成功提示
-      showToast(note ? '笔记已保存' : '笔记已清空', 'success');
-    } else {
-      showToast('保存失败，请重试', 'error');
+      if (result.success) {
+        // 重新渲染时间线以显示更新后的笔记 - 使用已处理的问题列表
+        renderTimeline(processedUserMessages);
+        
+        closeModal();
+        
+        // 显示成功提示
+        showToast(note ? '笔记已保存' : '笔记已清空', 'success');
+      } else {
+        console.error('保存失败详情:', result.error);
+        showToast(`保存失败: ${result.error || '未知错误'}`, 'error');
+      }
+    } catch (error) {
+      console.error('保存过程出现异常:', error);
+      showToast(`保存异常: ${error.message}`, 'error');
     }
   });
   
@@ -883,6 +1061,16 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
     }
   });
   
+  // 添加对停靠指示器的悬停支持
+  dockIndicator.addEventListener('mouseenter', () => {
+    if (!isExpanded && !isDragging) {
+      clearTimeout(expandTimeout);
+      expandTimeout = setTimeout(() => {
+        expandTimeline();
+      }, 200); // 更快响应
+    }
+  });
+  
   // 鼠标离开收起
   sidebar.addEventListener('mouseleave', () => {
     clearTimeout(expandTimeout);
@@ -908,13 +1096,27 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
     sidebar.style.right = '20px';
     sidebar.style.borderRadius = '12px';
     dockIndicator.style.display = 'none';
+    
+    // 确保内容区域可以滚动
+    const timelineContent = document.getElementById('timeline-content');
+    if (timelineContent) {
+      timelineContent.style.overflowY = 'auto';
+      timelineContent.style.pointerEvents = 'auto';
+    }
   }
   
   function collapseTimeline() {
     isExpanded = false;
-    sidebar.style.right = '-280px';
+    sidebar.style.right = '-290px';
     sidebar.style.borderRadius = '12px 0 0 12px';
     dockIndicator.style.display = 'flex';
+    
+    // 确保停靠状态下内容区域仍然可以滚动
+    const timelineContent = document.getElementById('timeline-content');
+    if (timelineContent) {
+      timelineContent.style.overflowY = 'auto';
+      timelineContent.style.pointerEvents = 'auto';
+    }
   }
   
   // 拖拽功能
@@ -929,22 +1131,7 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
     
     startPos = { x: e.clientX, y: e.clientY };
     
-    // 长按检测（用于标注长按功能）
-    longPressTimer = setTimeout(() => {
-      const target = e.target.closest('.timeline-item');
-      if (target && target.dataset.questionId) {
-        const questionId = target.dataset.questionId;
-        const bookmark = bookmarkedQuestions.get(questionId);
-        const questionText = target.textContent.trim();
-        
-        if (isBookmarked(questionId)) {
-          // 如果已标注，触发长按笔记编辑
-          const noteText = bookmark?.note || '';
-          showNoteModal(questionId, questionText, noteText);
-          showToast('长按编辑笔记', 'info');
-        }
-      }
-    }, 3000);
+    // 移除长按检测功能
     
     const handleMouseMove = (e) => {
       const deltaX = Math.abs(e.clientX - startPos.x);
@@ -1020,7 +1207,7 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
     sidebar.className = 'timeline-docked-right';
     sidebar.style.left = 'auto';
     sidebar.style.top = '50%';
-    sidebar.style.right = '-280px';
+    sidebar.style.right = '-290px';
     sidebar.style.transform = 'translateY(-50%)';
     sidebar.style.borderRadius = '12px 0 0 12px';
     dockIndicator.style.display = 'flex';
@@ -1031,13 +1218,13 @@ function setupDockingAndDragging(sidebar, dockIndicator) {
     sidebar.className = 'timeline-docked-left';
     sidebar.style.right = 'auto';
     sidebar.style.top = '50%';
-    sidebar.style.left = '-280px';
+    sidebar.style.left = '-290px';
     sidebar.style.transform = 'translateY(-50%)';
     sidebar.style.borderRadius = '0 12px 12px 0';
     
     // 调整停靠指示器到右侧
     dockIndicator.style.left = 'auto';
-    dockIndicator.style.right = '-8px';
+    dockIndicator.style.right = '-1px';
     dockIndicator.style.borderRadius = '0 4px 4px 0';
     dockIndicator.style.display = 'flex';
     
@@ -1173,58 +1360,11 @@ function updateQuestionCount(visible, total) {
     } else     if (currentFilterMode === 'notes') {
       countElement.textContent = `${visible} 个笔记`;
     } else {
-      // 计算标注和笔记数量
-      const bookmarkCount = Array.from(bookmarkedQuestions.keys()).filter(id => {
-        const bookmark = bookmarkedQuestions.get(id);
-        if (!bookmark) return false;
-        
-        // 检查是否过期
-        const now = Date.now();
-        if (bookmark.expiresAt && now > bookmark.expiresAt) {
-          return false;
-        }
-        
-        try {
-          const bookmarkUrl = new URL(bookmark.url);
-          const currentUrl = new URL(window.location.href);
-          return bookmarkUrl.pathname === currentUrl.pathname && bookmarkUrl.search === currentUrl.search;
-        } catch (e) {
-          return false;
-        }
-      }).length;
-      
-      const noteCount = Array.from(bookmarkedQuestions.keys()).filter(id => {
-        const bookmark = bookmarkedQuestions.get(id);
-        if (!bookmark) return false;
-        
-        // 检查是否过期
-        const now = Date.now();
-        if (bookmark.expiresAt && now > bookmark.expiresAt) {
-          return false;
-        }
-        
-        // 检查是否有笔记
-        if (!bookmark.note || bookmark.note.trim().length === 0) {
-          return false;
-        }
-        
-        try {
-          const bookmarkUrl = new URL(bookmark.url);
-          const currentUrl = new URL(window.location.href);
-          return bookmarkUrl.pathname === currentUrl.pathname && bookmarkUrl.search === currentUrl.search;
-        } catch (e) {
-          return false;
-        }
-      }).length;
-      
-      let statusText = '';
-      if (bookmarkCount > 0) statusText += `${bookmarkCount}⭐`;
-      if (noteCount > 0) statusText += `${bookmarkCount > 0 ? ' ' : ''}${noteCount}📝`;
-      
+      // 普通视图 - 简化计数显示，不显示标注统计
       if (visible === total) {
-        countElement.textContent = `${total} 个问题${statusText ? ` (${statusText})` : ''}`;
+        countElement.textContent = `${total} 个问题`;
       } else {
-        countElement.textContent = `${visible}/${total} 个问题${statusText ? ` (${statusText})` : ''}`;
+        countElement.textContent = `${visible}/${total} 个问题`;
       }
     }
   }
@@ -1411,6 +1551,9 @@ function scanQuestions() {
   userMessages = processedQuestions;
   console.log(`Gemini Timeline: 智能去重后保留 ${userMessages.length} 条用户问题`);
 
+  // 保存到全局变量
+  processedUserMessages = userMessages;
+
   // 显示找到的问题
   console.log(`Gemini Timeline: 🎉 最终找到 ${userMessages.length} 条用户问题`);
   for (let i = 0; i < Math.min(3, userMessages.length); i++) {
@@ -1529,21 +1672,21 @@ function renderTimeline(userMessages) {
     });
   } else {
     // 正常显示时，将标注的问题置顶
-    const bookmarkedQuestions = [];
-    const normalQuestions = [];
+    const bookmarkedMessages = [];
+    const normalMessages = [];
     
     questionsToShow.forEach(message => {
       const questionText = message.textContent.trim();
       const questionId = generateQuestionId(questionText);
       if (isBookmarked(questionId)) {
-        bookmarkedQuestions.push(message);
+        bookmarkedMessages.push(message);
       } else {
-        normalQuestions.push(message);
+        normalMessages.push(message);
       }
     });
     
     // 标注问题在前，普通问题在后
-    questionsToShow = [...bookmarkedQuestions, ...normalQuestions];
+    questionsToShow = [...bookmarkedMessages, ...normalMessages];
   }
   
   questionsToShow.forEach((message, index) => {
@@ -1586,92 +1729,72 @@ function renderTimeline(userMessages) {
       `;
       
       const questionTextSpan = document.createElement('span');
-      questionTextSpan.textContent = `Q${index + 1}: ${displayText}`;
+      questionTextSpan.textContent = `${index + 1}: ${displayText}`;
       questionTextSpan.style.cssText = `
         flex: 1;
         cursor: pointer;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.4;
+        max-height: 2.8em;
       `;
       
-      questionContent.appendChild(bookmarkButton);
-      questionContent.appendChild(questionTextSpan);
-      
-      // 添加笔记按钮
+      // 添加笔记按钮 - 确保可见版本，放在五角星旁边
       const bookmark = bookmarkedQuestions.get(questionId);
       const noteText = bookmark?.note || '';
       
       const noteButton = document.createElement('button');
       noteButton.innerHTML = '📝';
       noteButton.title = noteText ? `编辑笔记: ${noteText}` : '记录笔记';
+      noteButton.className = 'timeline-note-button'; // 添加类名用于调试
+      noteButton.style.cssText = `
+        background: rgba(102, 126, 234, 0.1);
+        border: 1px solid #667eea;
+        color: ${noteText ? '#667eea' : '#888'};
+        cursor: pointer;
+        font-size: 12px;
+        padding: 3px 5px;
+        border-radius: 3px;
+        transition: all 0.2s ease;
+        margin-left: 4px;
+        margin-right: 6px;
+        flex-shrink: 0;
+        min-width: 20px;
+        min-height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      `;
       
-      // 在标注筛选模式下，笔记按钮更加突出
-      if (isBookmarkFilterMode) {
-        noteButton.style.cssText = `
-          background: ${noteText ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0'};
-          border: 1px solid ${noteText ? '#667eea' : '#ddd'};
-          color: ${noteText ? 'white' : '#666'};
-          cursor: pointer;
-          font-size: 12px;
-          padding: 4px 8px;
-          border-radius: 4px;
-          transition: all 0.2s ease;
-          margin-left: 8px;
-          flex-shrink: 0;
-          font-weight: 500;
-        `;
-        noteButton.innerHTML = noteText ? '📝 已记录' : '📝 添加笔记';
-      } else {
-        noteButton.style.cssText = `
-          background: none;
-          border: none;
-          color: ${noteText ? '#667eea' : '#ccc'};
-          cursor: pointer;
-          font-size: 14px;
-          padding: 2px 4px;
-          border-radius: 3px;
-          transition: all 0.2s ease;
-          margin-left: 4px;
-          flex-shrink: 0;
-        `;
-      }
-      
-      // 笔记按钮点击事件
+      // 笔记按钮点击事件 - 直接弹出编辑框
       noteButton.addEventListener('click', async (e) => {
         e.stopPropagation();
-        
-        // 如果问题还没有标注，先自动标注
-        if (!isBookmarked(questionId)) {
-          const success = await saveBookmark(questionId, questionText, '');
-          if (!success) {
-            showToast('标注失败，请重试', 'error');
-            return;
-          }
-        }
-        
+        console.log('笔记按钮被点击:', questionId, questionText);
         showNoteModal(questionId, questionText, noteText);
       });
       
       // 笔记按钮悬停效果
       noteButton.addEventListener('mouseenter', function() {
-        if (isBookmarkFilterMode) {
-          this.style.transform = 'scale(1.05)';
-          this.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
-        } else {
-          this.style.transform = 'scale(1.1)';
-          this.style.color = noteText ? '#4285f4' : '#667eea';
-        }
+        this.style.transform = 'scale(1.05)';
+        this.style.backgroundColor = 'rgba(102, 126, 234, 0.2)';
+        this.style.borderColor = '#4285f4';
       });
       
       noteButton.addEventListener('mouseleave', function() {
-        if (isBookmarkFilterMode) {
-          this.style.transform = 'scale(1)';
-          this.style.boxShadow = 'none';
-        } else {
-          this.style.transform = 'scale(1)';
-          this.style.color = noteText ? '#667eea' : '#ccc';
-        }
+        this.style.transform = 'scale(1)';
+        this.style.backgroundColor = 'rgba(102, 126, 234, 0.1)';
+        this.style.borderColor = '#667eea';
       });
       
+      console.log('添加笔记按钮到问题:', index + 1, noteButton);
+      
+      // 按顺序添加：五角星 -> 笔记按钮 -> 问题文本
+      questionContent.appendChild(bookmarkButton);
       questionContent.appendChild(noteButton);
+      questionContent.appendChild(questionTextSpan);
       
       questionItem.appendChild(questionContent);
       
@@ -1721,7 +1844,7 @@ function renderTimeline(userMessages) {
       
       questionItem.title = questionText; // 完整文本作为tooltip
       
-      // 添加样式
+      // 添加样式 - 覆盖CSS文件中的样式
       questionItem.style.cssText = `
         padding: 8px 12px;
         margin: 4px 8px;
@@ -1733,7 +1856,12 @@ function renderTimeline(userMessages) {
         -webkit-user-select: text;
         -moz-user-select: text;
         -ms-user-select: text;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: unset !important;
+        display: block !important;
       `;
+      
       
       // 标注按钮点击事件 - 只做标注，不弹出备注框
       bookmarkButton.addEventListener('click', async function(e) {
@@ -1747,10 +1875,8 @@ function renderTimeline(userMessages) {
             this.style.color = '#ccc';
             this.title = '标注问题';
             
-            // 重新渲染时间线
-            const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-              .filter(el => el.textContent?.trim().length > 0);
-            renderTimeline(userMessages);
+            // 重新渲染时间线 - 使用已处理的问题列表
+            renderTimeline(processedUserMessages);
             
             showToast('标注已移除', 'info');
           }
@@ -1762,10 +1888,8 @@ function renderTimeline(userMessages) {
             this.style.color = '#ffd700';
             this.title = '已标注';
             
-            // 重新渲染时间线
-            const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
-              .filter(el => el.textContent?.trim().length > 0);
-            renderTimeline(userMessages);
+            // 重新渲染时间线 - 使用已处理的问题列表
+            renderTimeline(processedUserMessages);
             
             showToast('标注已保存', 'success');
           }
@@ -1894,5 +2018,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const timeline = document.getElementById('gemini-timeline');
     const isVisible = timeline && timeline.style.display !== 'none';
     sendResponse({ status: 'success', isVisible: isVisible });
+  } else if (request.action === 'clearAllData') {
+    // 清除所有数据
+    clearAllData().then(() => {
+      sendResponse({ status: 'success', message: '数据已清除' });
+      
+      // 刷新时间线显示
+      const timelineContent = document.getElementById('timeline-content');
+      if (timelineContent) {
+        timelineContent.innerHTML = '<div style="padding: 16px; text-align: center; color: #666;">数据已清除，暂无问题记录</div>';
+      }
+      
+      // 更新计数显示
+      const countElement = document.getElementById('question-count');
+      if (countElement) {
+        countElement.textContent = '0 个问题';
+      }
+    }).catch(error => {
+      sendResponse({ status: 'error', message: error.message });
+    });
+    return true; // 保持消息通道开放，等待异步响应
   }
 });
