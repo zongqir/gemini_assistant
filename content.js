@@ -111,16 +111,17 @@ function createTimelineContainer() {
   // 创建主容器
   const sidebar = document.createElement('div');
   sidebar.id = 'gemini-timeline';
+  sidebar.className = 'timeline-docked-right'; // 添加停靠状态类
   sidebar.style.cssText = `
     position: fixed;
     top: 50%;
-    right: 20px;
+    right: -280px;
     transform: translateY(-50%);
     width: 320px;
     max-height: 80vh;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid #e0e0e0;
-    border-radius: 12px;
+    border-radius: 12px 0 0 12px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.12);
     z-index: 999999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -128,7 +129,35 @@ function createTimelineContainer() {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transition: right 0.3s ease, border-radius 0.3s ease;
+    cursor: move;
   `;
+  
+  // 添加停靠指示器
+  const dockIndicator = document.createElement('div');
+  dockIndicator.id = 'timeline-dock-indicator';
+  dockIndicator.style.cssText = `
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 40px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px 0 0 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  `;
+  dockIndicator.innerHTML = '📋';
+  dockIndicator.title = '点击展开时间线';
+  
+  sidebar.appendChild(dockIndicator);
 
   // 创建标题栏
   const header = document.createElement('div');
@@ -146,7 +175,8 @@ function createTimelineContainer() {
   header.innerHTML = `
     <span>问题时间线</span>
     <div>
-      <button id="bookmarks-toggle" title="显示/隐藏标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 8px;">⭐</button>
+      <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; opacity: 0.7;">⭐</button>
+      <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 8px; opacity: 0.7;">📝</button>
       <span id="question-count" style="font-size: 12px; opacity: 0.8; margin-right: 10px;">0 个问题</span>
       <button id="timeline-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 0;">−</button>
     </div>
@@ -162,7 +192,7 @@ function createTimelineContainer() {
   
   const searchInput = document.createElement('input');
   searchInput.type = 'text';
-  searchInput.placeholder = '🔍 搜索问题...';
+  searchInput.placeholder = '🔍 搜索问题和笔记...';
   searchInput.id = 'timeline-search';
   searchInput.style.cssText = `
     width: 100%;
@@ -185,6 +215,23 @@ function createTimelineContainer() {
     line-height: 1.3;
   `;
   hintText.textContent = '⭐ 标注问题将在7天后自动清理';
+  
+  // 根据当前筛选模式添加不同提示
+  const updateHintText = () => {
+    const notesToggle = document.getElementById('notes-toggle');
+    if (notesToggle && notesToggle.style.opacity === '1') {
+      hintText.innerHTML = '💡 在普通界面长按标注3秒可快速编辑笔记';
+    } else {
+      hintText.textContent = '⭐ 标注问题将在7天后自动清理';
+    }
+  };
+  
+  // 监听筛选按钮变化
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'notes-toggle' || e.target.id === 'bookmarks-toggle') {
+      setTimeout(updateHintText, 100);
+    }
+  });
   
   searchContainer.appendChild(searchInput);
   searchContainer.appendChild(hintText);
@@ -218,12 +265,42 @@ function createTimelineContainer() {
     this.textContent = isCollapsed ? '−' : '+';
   });
 
+  // 筛选状态变量
+  let filterMode = 'all'; // 'all', 'bookmarks', 'notes'
+  
   // 添加标注切换功能
-  let showOnlyBookmarks = false;
   document.getElementById('bookmarks-toggle').addEventListener('click', function() {
-    showOnlyBookmarks = !showOnlyBookmarks;
-    this.style.opacity = showOnlyBookmarks ? '1' : '0.7';
-    this.title = showOnlyBookmarks ? '显示所有问题' : '只显示标注问题';
+    const wasActive = filterMode === 'bookmarks';
+    filterMode = wasActive ? 'all' : 'bookmarks';
+    
+    // 更新按钮状态
+    this.style.opacity = filterMode === 'bookmarks' ? '1' : '0.7';
+    this.title = filterMode === 'bookmarks' ? '显示所有问题' : '只显示标注问题';
+    
+    // 重置备注按钮状态
+    const notesButton = document.getElementById('notes-toggle');
+    notesButton.style.opacity = '0.7';
+    notesButton.title = '只显示有笔记的问题';
+    
+    // 重新渲染时间线
+    const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
+      .filter(el => el.textContent?.trim().length > 0);
+    renderTimeline(userMessages);
+  });
+  
+  // 添加备注切换功能
+  document.getElementById('notes-toggle').addEventListener('click', function() {
+    const wasActive = filterMode === 'notes';
+    filterMode = wasActive ? 'all' : 'notes';
+    
+    // 更新按钮状态
+    this.style.opacity = filterMode === 'notes' ? '1' : '0.7';
+    this.title = filterMode === 'notes' ? '显示所有问题' : '只显示有笔记的问题';
+    
+    // 重置标注按钮状态
+    const bookmarksButton = document.getElementById('bookmarks-toggle');
+    bookmarksButton.style.opacity = '0.7';
+    bookmarksButton.title = '只显示标注问题';
     
     // 重新渲染时间线
     const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
@@ -233,6 +310,9 @@ function createTimelineContainer() {
 
   // 添加搜索功能
   setupSearch();
+  
+  // 添加停靠和拖拽功能
+  setupDockingAndDragging(sidebar, dockIndicator);
   
   // 监控时间线容器的可见性
   monitorTimelineVisibility();
@@ -312,7 +392,7 @@ function generateQuestionId(questionText, url = window.location.href) {
 }
 
 // 保存标注到存储
-async function saveBookmark(questionId, questionText, url = window.location.href) {
+async function saveBookmark(questionId, questionText, note = '', url = window.location.href) {
   try {
     const now = Date.now();
     bookmarkedQuestions.set(questionId, {
@@ -320,6 +400,7 @@ async function saveBookmark(questionId, questionText, url = window.location.href
       url: url,
       timestamp: now,
       expiresAt: now + (7 * 24 * 60 * 60 * 1000), // 7天后过期
+      note: note, // 新增备注字段
       id: questionId
     });
     
@@ -330,6 +411,27 @@ async function saveBookmark(questionId, questionText, url = window.location.href
     return true;
   } catch (error) {
     console.error('Gemini Timeline: 保存标注失败:', error);
+    return false;
+  }
+}
+
+// 更新标注笔记
+async function updateBookmarkNote(questionId, note) {
+  try {
+    const bookmark = bookmarkedQuestions.get(questionId);
+    if (bookmark) {
+      bookmark.note = note;
+      bookmarkedQuestions.set(questionId, bookmark);
+      
+      // 转换Map为对象以便存储
+      const bookmarksObj = Object.fromEntries(bookmarkedQuestions);
+      await chrome.storage.sync.set({ bookmarkedQuestions: bookmarksObj });
+      console.log('Gemini Timeline: 更新笔记成功:', note.substring(0, 30));
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Gemini Timeline: 更新笔记失败:', error);
     return false;
   }
 }
@@ -470,9 +572,228 @@ function showBookmarkNotification(count) {
   }, 5000);
 }
 
-// 添加通知动画的CSS
-const notificationStyles = document.createElement('style');
-notificationStyles.textContent = `
+// 显示备注编辑弹窗
+function showNoteModal(questionId, questionText, currentNote = '') {
+  // 移除现有的弹窗
+  const existingModal = document.getElementById('note-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // 创建模态框背景
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'note-modal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeInModal 0.3s ease-out;
+  `;
+  
+  // 创建模态框内容
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    animation: slideInModal 0.3s ease-out;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="margin-bottom: 16px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #333;">记录笔记内容</h3>
+      <div style="font-size: 14px; color: #666; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis;">
+        ${questionText.substring(0, 150)}${questionText.length > 150 ? '...' : ''}
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #333; font-weight: 500;">
+        笔记内容：
+      </label>
+      <textarea id="note-input" placeholder="记录这个问题的重要性或原因，如：答案很不错、需要参考、重要信息等..." style="
+        width: 100%;
+        height: 100px;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.2s ease;
+        box-sizing: border-box;
+      ">${currentNote}</textarea>
+    </div>
+    
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button id="note-cancel" style="
+        padding: 10px 20px;
+        border: 2px solid #ddd;
+        background: white;
+        color: #666;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      ">取消</button>
+      <button id="note-save" style="
+        padding: 10px 20px;
+        border: none;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      ">保存</button>
+    </div>
+  `;
+  
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+  
+  // 获取元素
+  const noteInput = document.getElementById('note-input');
+  const cancelBtn = document.getElementById('note-cancel');
+  const saveBtn = document.getElementById('note-save');
+  
+  // 聚焦到输入框
+  setTimeout(() => {
+    noteInput.focus();
+    noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length);
+  }, 100);
+  
+  // 样式交互
+  noteInput.addEventListener('focus', () => {
+    noteInput.style.borderColor = '#667eea';
+  });
+  
+  noteInput.addEventListener('blur', () => {
+    noteInput.style.borderColor = '#e0e0e0';
+  });
+  
+  cancelBtn.addEventListener('mouseenter', () => {
+    cancelBtn.style.borderColor = '#bbb';
+    cancelBtn.style.color = '#333';
+  });
+  
+  cancelBtn.addEventListener('mouseleave', () => {
+    cancelBtn.style.borderColor = '#ddd';
+    cancelBtn.style.color = '#666';
+  });
+  
+  saveBtn.addEventListener('mouseenter', () => {
+    saveBtn.style.transform = 'translateY(-1px)';
+    saveBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+  });
+  
+  saveBtn.addEventListener('mouseleave', () => {
+    saveBtn.style.transform = 'translateY(0)';
+    saveBtn.style.boxShadow = 'none';
+  });
+  
+  // 事件处理
+  const closeModal = () => {
+    modalOverlay.style.animation = 'fadeOutModal 0.2s ease-in';
+    setTimeout(() => {
+      if (modalOverlay.parentNode) {
+        modalOverlay.remove();
+      }
+    }, 200);
+  };
+  
+  cancelBtn.addEventListener('click', closeModal);
+  
+  // 点击背景关闭
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      closeModal();
+    }
+  });
+  
+  // ESC键关闭
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', handleEsc);
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
+  
+  // 保存备注
+  saveBtn.addEventListener('click', async () => {
+    const note = noteInput.value.trim();
+    const success = await updateBookmarkNote(questionId, note);
+    
+    if (success) {
+      // 重新渲染时间线以显示更新后的备注
+      const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
+        .filter(el => el.textContent?.trim().length > 0);
+      renderTimeline(userMessages);
+      
+      closeModal();
+      
+      // 显示成功提示
+      showToast(note ? '笔记已保存' : '笔记已清空', 'success');
+    } else {
+      showToast('保存失败，请重试', 'error');
+    }
+  });
+  
+  // Ctrl+Enter 快捷保存
+  noteInput.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      saveBtn.click();
+    }
+  });
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    padding: 12px 16px;
+    background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
+    color: white;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000002;
+    animation: slideInToast 0.3s ease-out;
+  `;
+  toast.textContent = message;
+  
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.animation = 'slideOutToast 0.3s ease-in';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.remove();
+      }
+    }, 300);
+  }, 2000);
+}
+
+// 添加所有动画的CSS
+const allStyles = document.createElement('style');
+allStyles.textContent = `
   @keyframes slideInNotification {
     from {
       opacity: 0;
@@ -494,8 +815,248 @@ notificationStyles.textContent = `
       transform: translateY(-10px) translateX(20px);
     }
   }
+  
+  @keyframes fadeInModal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOutModal {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  @keyframes slideInModal {
+    from {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  
+  @keyframes slideInToast {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  @keyframes slideOutToast {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+  }
 `;
-document.head.appendChild(notificationStyles);
+document.head.appendChild(allStyles);
+
+// 设置停靠和拖拽功能
+function setupDockingAndDragging(sidebar, dockIndicator) {
+  let isDragging = false;
+  let dragOffset = { x: 0, y: 0 };
+  let isExpanded = false;
+  let expandTimeout = null;
+  
+  // 停靠指示器点击展开
+  dockIndicator.addEventListener('click', () => {
+    toggleTimeline();
+  });
+  
+  // 鼠标悬停展开
+  sidebar.addEventListener('mouseenter', () => {
+    if (!isExpanded && !isDragging) {
+      clearTimeout(expandTimeout);
+      expandTimeout = setTimeout(() => {
+        expandTimeline();
+      }, 300);
+    }
+  });
+  
+  // 鼠标离开收起
+  sidebar.addEventListener('mouseleave', () => {
+    clearTimeout(expandTimeout);
+    if (isExpanded && !isDragging) {
+      setTimeout(() => {
+        if (!sidebar.matches(':hover') && !isDragging) {
+          collapseTimeline();
+        }
+      }, 500);
+    }
+  });
+  
+  function toggleTimeline() {
+    if (isExpanded) {
+      collapseTimeline();
+    } else {
+      expandTimeline();
+    }
+  }
+  
+  function expandTimeline() {
+    isExpanded = true;
+    sidebar.style.right = '20px';
+    sidebar.style.borderRadius = '12px';
+    dockIndicator.style.display = 'none';
+  }
+  
+  function collapseTimeline() {
+    isExpanded = false;
+    sidebar.style.right = '-280px';
+    sidebar.style.borderRadius = '12px 0 0 12px';
+    dockIndicator.style.display = 'flex';
+  }
+  
+  // 拖拽功能
+  let longPressTimer = null;
+  let startPos = { x: 0, y: 0 };
+  
+  sidebar.addEventListener('mousedown', (e) => {
+    // 排除按钮和输入框
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    startPos = { x: e.clientX, y: e.clientY };
+    
+    // 长按检测（用于标注长按功能）
+    longPressTimer = setTimeout(() => {
+      const target = e.target.closest('.timeline-item');
+      if (target && target.dataset.questionId) {
+        const questionId = target.dataset.questionId;
+        const bookmark = bookmarkedQuestions.get(questionId);
+        const questionText = target.textContent.trim();
+        
+        if (isBookmarked(questionId)) {
+          // 如果已标注，触发长按笔记编辑
+          const noteText = bookmark?.note || '';
+          showNoteModal(questionId, questionText, noteText);
+          showToast('长按编辑笔记', 'info');
+        }
+      }
+    }, 3000);
+    
+    const handleMouseMove = (e) => {
+      const deltaX = Math.abs(e.clientX - startPos.x);
+      const deltaY = Math.abs(e.clientY - startPos.y);
+      
+      // 如果移动距离超过阈值，开始拖拽
+      if ((deltaX > 5 || deltaY > 5) && !isDragging) {
+        clearTimeout(longPressTimer);
+        startDragging(e);
+      }
+      
+      if (isDragging) {
+        const newX = e.clientX - dragOffset.x;
+        const newY = e.clientY - dragOffset.y;
+        
+        // 限制拖拽范围
+        const maxX = window.innerWidth - sidebar.offsetWidth;
+        const maxY = window.innerHeight - sidebar.offsetHeight;
+        
+        const clampedX = Math.max(0, Math.min(maxX, newX));
+        const clampedY = Math.max(0, Math.min(maxY, newY));
+        
+        sidebar.style.left = clampedX + 'px';
+        sidebar.style.top = clampedY + 'px';
+        sidebar.style.right = 'auto';
+        sidebar.style.transform = 'none';
+        
+        // 更新边框样式
+        sidebar.style.borderRadius = '12px';
+        dockIndicator.style.display = 'none';
+      }
+    };
+    
+    const handleMouseUp = () => {
+      clearTimeout(longPressTimer);
+      
+      if (isDragging) {
+        isDragging = false;
+        sidebar.style.cursor = 'move';
+        
+        // 检查是否靠近边缘，如果是则停靠
+        const rect = sidebar.getBoundingClientRect();
+        const snapDistance = 50;
+        
+        if (rect.right > window.innerWidth - snapDistance) {
+          // 停靠到右边
+          snapToRight();
+        } else if (rect.left < snapDistance) {
+          // 停靠到左边
+          snapToLeft();
+        }
+      }
+      
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  });
+  
+  function startDragging(e) {
+    isDragging = true;
+    isExpanded = true;
+    sidebar.style.cursor = 'grabbing';
+    
+    const rect = sidebar.getBoundingClientRect();
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+  }
+  
+  function snapToRight() {
+    sidebar.className = 'timeline-docked-right';
+    sidebar.style.left = 'auto';
+    sidebar.style.top = '50%';
+    sidebar.style.right = '-280px';
+    sidebar.style.transform = 'translateY(-50%)';
+    sidebar.style.borderRadius = '12px 0 0 12px';
+    dockIndicator.style.display = 'flex';
+    isExpanded = false;
+  }
+  
+  function snapToLeft() {
+    sidebar.className = 'timeline-docked-left';
+    sidebar.style.right = 'auto';
+    sidebar.style.top = '50%';
+    sidebar.style.left = '-280px';
+    sidebar.style.transform = 'translateY(-50%)';
+    sidebar.style.borderRadius = '0 12px 12px 0';
+    
+    // 调整停靠指示器到右侧
+    dockIndicator.style.left = 'auto';
+    dockIndicator.style.right = '-8px';
+    dockIndicator.style.borderRadius = '0 4px 4px 0';
+    dockIndicator.style.display = 'flex';
+    
+    // 更新悬停展开逻辑
+    sidebar.addEventListener('mouseenter', () => {
+      if (!isExpanded && !isDragging) {
+        sidebar.style.left = '20px';
+        sidebar.style.borderRadius = '12px';
+        dockIndicator.style.display = 'none';
+        isExpanded = true;
+      }
+    });
+    
+    isExpanded = false;
+  }
+  
+  // 初始状态为收起
+  collapseTimeline();
+}
 
 // 设置搜索功能
 function setupSearch() {
@@ -519,7 +1080,7 @@ function setupSearch() {
   });
 }
 
-// 过滤问题
+// 过滤问题（包括笔记搜索）
 function filterQuestions(searchTerm) {
   const timelineContent = document.getElementById('timeline-content');
   if (!timelineContent) return;
@@ -528,11 +1089,30 @@ function filterQuestions(searchTerm) {
   let visibleCount = 0;
 
   questionItems.forEach(item => {
+    const questionId = item.dataset.questionId;
     const questionText = item.textContent.toLowerCase();
-    const isMatch = !searchTerm || questionText.includes(searchTerm);
+    
+    // 获取笔记内容
+    const bookmark = bookmarkedQuestions.get(questionId);
+    const noteText = (bookmark?.note || '').toLowerCase();
+    
+    // 检查问题文本或笔记是否匹配搜索词
+    const questionMatch = !searchTerm || questionText.includes(searchTerm);
+    const noteMatch = !searchTerm || noteText.includes(searchTerm);
+    const isMatch = questionMatch || noteMatch;
     
     item.style.display = isMatch ? 'block' : 'none';
     if (isMatch) visibleCount++;
+    
+    // 如果是通过笔记匹配的，高亮显示笔记区域
+    const noteDisplay = item.querySelector('[style*="rgba(255, 215, 0, 0.1)"]');
+    if (noteDisplay && noteMatch && !questionMatch && searchTerm) {
+      noteDisplay.style.background = 'rgba(255, 215, 0, 0.25)';
+      noteDisplay.style.borderLeftColor = '#ff8c00';
+    } else if (noteDisplay) {
+      noteDisplay.style.background = 'rgba(255, 215, 0, 0.1)';
+      noteDisplay.style.borderLeftColor = '#ffd700';
+    }
   });
 
   // 更新计数显示
@@ -579,12 +1159,21 @@ function updateQuestionCount(visible, total) {
   const countElement = document.getElementById('question-count');
   if (countElement) {
     const bookmarksToggle = document.getElementById('bookmarks-toggle');
-    const showOnlyBookmarks = bookmarksToggle && bookmarksToggle.style.opacity === '1';
+    const notesToggle = document.getElementById('notes-toggle');
     
-    if (showOnlyBookmarks) {
-      const bookmarkCount = visible;
-      countElement.textContent = `${bookmarkCount} 个标注`;
+    let currentFilterMode = 'all';
+    if (bookmarksToggle && bookmarksToggle.style.opacity === '1') {
+      currentFilterMode = 'bookmarks';
+    } else if (notesToggle && notesToggle.style.opacity === '1') {
+      currentFilterMode = 'notes';
+    }
+    
+    if (currentFilterMode === 'bookmarks') {
+      countElement.textContent = `${visible} 个标注`;
+    } else     if (currentFilterMode === 'notes') {
+      countElement.textContent = `${visible} 个笔记`;
     } else {
+      // 计算标注和笔记数量
       const bookmarkCount = Array.from(bookmarkedQuestions.keys()).filter(id => {
         const bookmark = bookmarkedQuestions.get(id);
         if (!bookmark) return false;
@@ -604,10 +1193,38 @@ function updateQuestionCount(visible, total) {
         }
       }).length;
       
+      const noteCount = Array.from(bookmarkedQuestions.keys()).filter(id => {
+        const bookmark = bookmarkedQuestions.get(id);
+        if (!bookmark) return false;
+        
+        // 检查是否过期
+        const now = Date.now();
+        if (bookmark.expiresAt && now > bookmark.expiresAt) {
+          return false;
+        }
+        
+        // 检查是否有笔记
+        if (!bookmark.note || bookmark.note.trim().length === 0) {
+          return false;
+        }
+        
+        try {
+          const bookmarkUrl = new URL(bookmark.url);
+          const currentUrl = new URL(window.location.href);
+          return bookmarkUrl.pathname === currentUrl.pathname && bookmarkUrl.search === currentUrl.search;
+        } catch (e) {
+          return false;
+        }
+      }).length;
+      
+      let statusText = '';
+      if (bookmarkCount > 0) statusText += `${bookmarkCount}⭐`;
+      if (noteCount > 0) statusText += `${bookmarkCount > 0 ? ' ' : ''}${noteCount}📝`;
+      
       if (visible === total) {
-        countElement.textContent = `${total} 个问题${bookmarkCount > 0 ? ` (${bookmarkCount}⭐)` : ''}`;
+        countElement.textContent = `${total} 个问题${statusText ? ` (${statusText})` : ''}`;
       } else {
-        countElement.textContent = `${visible}/${total} 个问题${bookmarkCount > 0 ? ` (${bookmarkCount}⭐)` : ''}`;
+        countElement.textContent = `${visible}/${total} 个问题${statusText ? ` (${statusText})` : ''}`;
       }
     }
   }
@@ -881,18 +1498,34 @@ function renderTimeline(userMessages) {
     return matches / Math.max(text1.length, text2.length);
   }
 
-  // 检查是否只显示标注问题
+  // 检查当前的筛选模式
   const bookmarksToggle = document.getElementById('bookmarks-toggle');
-  const showOnlyBookmarks = bookmarksToggle && bookmarksToggle.style.opacity === '1';
+  const notesToggle = document.getElementById('notes-toggle');
+  
+  let currentFilterMode = 'all';
+  if (bookmarksToggle && bookmarksToggle.style.opacity === '1') {
+    currentFilterMode = 'bookmarks';
+  } else if (notesToggle && notesToggle.style.opacity === '1') {
+    currentFilterMode = 'notes';
+  }
   
   let questionsToShow = finalQuestions.slice(0, 100).reverse();
   
-  // 如果只显示标注问题，过滤出已标注的问题
-  if (showOnlyBookmarks) {
+  // 根据筛选模式过滤问题
+  if (currentFilterMode === 'bookmarks') {
+    // 只显示标注问题
     questionsToShow = questionsToShow.filter(message => {
       const questionText = message.textContent.trim();
       const questionId = generateQuestionId(questionText);
       return isBookmarked(questionId);
+    });
+  } else if (currentFilterMode === 'notes') {
+    // 只显示有备注的问题
+    questionsToShow = questionsToShow.filter(message => {
+      const questionText = message.textContent.trim();
+      const questionId = generateQuestionId(questionText);
+      const bookmark = bookmarkedQuestions.get(questionId);
+      return bookmark && bookmark.note && bookmark.note.trim().length > 0;
     });
   } else {
     // 正常显示时，将标注的问题置顶
@@ -924,6 +1557,9 @@ function renderTimeline(userMessages) {
       questionItem.className = 'timeline-item';
       questionItem.dataset.index = index;
       questionItem.dataset.questionId = questionId;
+      
+      // 检查是否在标注筛选模式
+      const isBookmarkFilterMode = currentFilterMode === 'bookmarks';
       
       // 创建问题内容容器
       const questionContent = document.createElement('div');
@@ -958,7 +1594,130 @@ function renderTimeline(userMessages) {
       
       questionContent.appendChild(bookmarkButton);
       questionContent.appendChild(questionTextSpan);
+      
+      // 添加笔记按钮
+      const bookmark = bookmarkedQuestions.get(questionId);
+      const noteText = bookmark?.note || '';
+      
+      const noteButton = document.createElement('button');
+      noteButton.innerHTML = '📝';
+      noteButton.title = noteText ? `编辑笔记: ${noteText}` : '记录笔记';
+      
+      // 在标注筛选模式下，笔记按钮更加突出
+      if (isBookmarkFilterMode) {
+        noteButton.style.cssText = `
+          background: ${noteText ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f0f0f0'};
+          border: 1px solid ${noteText ? '#667eea' : '#ddd'};
+          color: ${noteText ? 'white' : '#666'};
+          cursor: pointer;
+          font-size: 12px;
+          padding: 4px 8px;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+          margin-left: 8px;
+          flex-shrink: 0;
+          font-weight: 500;
+        `;
+        noteButton.innerHTML = noteText ? '📝 已记录' : '📝 添加笔记';
+      } else {
+        noteButton.style.cssText = `
+          background: none;
+          border: none;
+          color: ${noteText ? '#667eea' : '#ccc'};
+          cursor: pointer;
+          font-size: 14px;
+          padding: 2px 4px;
+          border-radius: 3px;
+          transition: all 0.2s ease;
+          margin-left: 4px;
+          flex-shrink: 0;
+        `;
+      }
+      
+      // 笔记按钮点击事件
+      noteButton.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        
+        // 如果问题还没有标注，先自动标注
+        if (!isBookmarked(questionId)) {
+          const success = await saveBookmark(questionId, questionText, '');
+          if (!success) {
+            showToast('标注失败，请重试', 'error');
+            return;
+          }
+        }
+        
+        showNoteModal(questionId, questionText, noteText);
+      });
+      
+      // 笔记按钮悬停效果
+      noteButton.addEventListener('mouseenter', function() {
+        if (isBookmarkFilterMode) {
+          this.style.transform = 'scale(1.05)';
+          this.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+        } else {
+          this.style.transform = 'scale(1.1)';
+          this.style.color = noteText ? '#4285f4' : '#667eea';
+        }
+      });
+      
+      noteButton.addEventListener('mouseleave', function() {
+        if (isBookmarkFilterMode) {
+          this.style.transform = 'scale(1)';
+          this.style.boxShadow = 'none';
+        } else {
+          this.style.transform = 'scale(1)';
+          this.style.color = noteText ? '#667eea' : '#ccc';
+        }
+      });
+      
+      questionContent.appendChild(noteButton);
+      
       questionItem.appendChild(questionContent);
+      
+        // 如果有笔记，在问题下方显示笔记内容
+      if (isBookmarkedQuestion) {
+        const bookmark = bookmarkedQuestions.get(questionId);
+        const noteText = bookmark?.note || '';
+        
+        if (noteText) {
+          const noteDisplay = document.createElement('div');
+          noteDisplay.style.cssText = `
+            margin-top: 6px;
+            padding: 8px 10px;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.3;
+            border-left: 3px solid #ffd700;
+            cursor: pointer;
+          `;
+          noteDisplay.innerHTML = `
+            <div style="display: flex; align-items: center; margin-bottom: 2px;">
+              <span style="font-weight: 500; color: #b8860b;">📝 笔记:</span>
+            </div>
+            <div style="word-break: break-word;">${noteText}</div>
+          `;
+          
+          // 点击笔记区域也可以编辑
+          noteDisplay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showNoteModal(questionId, questionText, noteText);
+          });
+          
+          // 笔记区域悬停效果
+          noteDisplay.addEventListener('mouseenter', function() {
+            this.style.background = 'rgba(255, 215, 0, 0.15)';
+          });
+          
+          noteDisplay.addEventListener('mouseleave', function() {
+            this.style.background = 'rgba(255, 215, 0, 0.1)';
+          });
+          
+          questionItem.appendChild(noteDisplay);
+        }
+      }
       
       questionItem.title = questionText; // 完整文本作为tooltip
       
@@ -976,7 +1735,7 @@ function renderTimeline(userMessages) {
         -ms-user-select: text;
       `;
       
-      // 标注按钮点击事件
+      // 标注按钮点击事件 - 只做标注，不弹出备注框
       bookmarkButton.addEventListener('click', async function(e) {
         e.stopPropagation();
         
@@ -987,18 +1746,28 @@ function renderTimeline(userMessages) {
             this.innerHTML = '☆';
             this.style.color = '#ccc';
             this.title = '标注问题';
-            questionItem.style.background = '#f8f9fa';
-            questionItem.style.borderLeftColor = '#667eea';
+            
+            // 重新渲染时间线
+            const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
+              .filter(el => el.textContent?.trim().length > 0);
+            renderTimeline(userMessages);
+            
+            showToast('标注已移除', 'info');
           }
         } else {
-          // 添加标注
-          const success = await saveBookmark(questionId, questionText);
+          // 添加标注 - 只标注，不弹出备注框
+          const success = await saveBookmark(questionId, questionText, '');
           if (success) {
             this.innerHTML = '★';
             this.style.color = '#ffd700';
-            this.title = '取消标注';
-            questionItem.style.background = '#fff3cd';
-            questionItem.style.borderLeftColor = '#ffd700';
+            this.title = '已标注';
+            
+            // 重新渲染时间线
+            const userMessages = Array.from(document.querySelectorAll('user-query-content, .user-query-bubble-with-background, .query-text, .query-text-line, [class*="user-query"], [class*="query-text"], [class*="query-bubble"]'))
+              .filter(el => el.textContent?.trim().length > 0);
+            renderTimeline(userMessages);
+            
+            showToast('标注已保存', 'success');
           }
         }
       });
