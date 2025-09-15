@@ -1495,6 +1495,16 @@ function showHighlightMenu(x, y, selectedText, range) {
 
 // 显示划线评论弹窗
 function showHighlightCommentModal(selectedText, range) {
+  // 检测当前页面的主题模式
+  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
+                     document.documentElement.classList.contains('dark') ||
+                     document.body.classList.contains('dark') ||
+                     document.querySelector('[data-theme="dark"]') ||
+                     getComputedStyle(document.body).backgroundColor === 'rgb(32, 33, 36)' ||
+                     getComputedStyle(document.documentElement).backgroundColor === 'rgb(32, 33, 36)';
+  
+  console.log('🌙 检测到暗黑模式:', isDarkMode);
+  
   const modal = document.createElement('div');
   modal.id = 'highlight-comment-modal';
   modal.style.cssText = `
@@ -1503,68 +1513,106 @@ function showHighlightCommentModal(selectedText, range) {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     z-index: 10001;
     display: flex;
     align-items: center;
     justify-content: center;
   `;
   
+  // 根据主题设置颜色变量
+  const colors = isDarkMode ? {
+    bg: '#2d2e30',
+    text: '#e8eaed',
+    subText: '#9aa0a6',
+    border: '#5f6368',
+    inputBg: '#3c4043',
+    inputBorder: '#5f6368',
+    inputText: '#e8eaed',
+    quoteBg: '#3c4043',
+    quoteBorder: '#8ab4f8',
+    cancelBg: '#3c4043',
+    cancelText: '#9aa0a6',
+    cancelBorder: '#5f6368',
+    saveBg: '#8ab4f8',
+    saveText: '#202124'
+  } : {
+    bg: '#ffffff',
+    text: '#202124',
+    subText: '#5f6368',
+    border: '#dadce0',
+    inputBg: '#ffffff',
+    inputBorder: '#dadce0',
+    inputText: '#202124',
+    quoteBg: '#f8f9fa',
+    quoteBorder: '#4285f4',
+    cancelBg: '#f8f9fa',
+    cancelText: '#5f6368',
+    cancelBorder: '#dadce0',
+    saveBg: '#4285f4',
+    saveText: '#ffffff'
+  };
+  
   const content = document.createElement('div');
   content.style.cssText = `
-    background: white;
+    background: ${colors.bg} !important;
+    color: ${colors.text} !important;
     border-radius: 12px;
     padding: 24px;
     max-width: 500px;
     width: 90%;
     max-height: 80vh;
     overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    border: 1px solid ${colors.border};
   `;
   
   content.innerHTML = `
-    <h3 style="margin: 0 0 16px 0; color: #333; font-size: 18px;">🖍️ 添加划线和评论</h3>
+    <h3 style="margin: 0 0 16px 0; color: ${colors.text} !important; font-size: 18px;">🖍️ 添加划线和评论</h3>
     
     <div style="margin-bottom: 16px;">
-      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">选中的文本：</label>
-      <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 4px solid #4285f4; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: ${colors.subText} !important;">选中的文本：</label>
+      <div style="background: ${colors.quoteBg} !important; color: ${colors.text} !important; padding: 12px; border-radius: 6px; border-left: 4px solid ${colors.quoteBorder}; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
         ${selectedText}
       </div>
     </div>
     
     <div style="margin-bottom: 20px;">
-      <label for="highlight-comment" style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">💬 评论（可选）：</label>
+      <label for="highlight-comment" style="display: block; margin-bottom: 8px; font-weight: 500; color: ${colors.subText} !important;">💬 评论（可选）：</label>
       <textarea id="highlight-comment" placeholder="为什么觉得这段内容好？添加你的想法..." style="
-        width: 100%;
-        min-height: 100px;
-        padding: 12px;
-        border: 2px solid #e1e5e9;
-        border-radius: 6px;
-        font-size: 14px;
-        font-family: inherit;
-        resize: vertical;
-        box-sizing: border-box;
+        width: 100% !important;
+        min-height: 100px !important;
+        padding: 12px !important;
+        border: 2px solid ${colors.inputBorder} !important;
+        border-radius: 6px !important;
+        font-size: 14px !important;
+        font-family: inherit !important;
+        resize: vertical !important;
+        box-sizing: border-box !important;
+        background: ${colors.inputBg} !important;
+        color: ${colors.inputText} !important;
+        outline: none !important;
       "></textarea>
     </div>
     
     <div style="display: flex; gap: 12px; justify-content: flex-end;">
       <button id="highlight-cancel" style="
-        background: #f8f9fa;
-        color: #5f6368;
-        border: 1px solid #dadce0;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
+        background: ${colors.cancelBg} !important;
+        color: ${colors.cancelText} !important;
+        border: 1px solid ${colors.cancelBorder} !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
       ">取消</button>
       <button id="highlight-save" style="
-        background: #4285f4;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
+        background: ${colors.saveBg} !important;
+        color: ${colors.saveText} !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
       ">保存划线</button>
     </div>
   `;
@@ -1640,8 +1688,8 @@ async function createHighlight(text, comment, range) {
     const existingBookmark = bookmarkedQuestions.get(questionId);
     let noteText = existingBookmark ? existingBookmark.note || '' : '';
     
-    // 直接将划线文本作为笔记内容，评论作为说明
-    const highlightNote = comment ? `${text}\n\n💬 ${comment}` : text;
+    // 格式化划线内容，使用图标标识
+    const highlightNote = comment ? `🖍️ ${text}\n💭 ${comment}` : `🖍️ ${text}`;
     noteText = noteText ? `${noteText}\n\n${highlightNote}` : highlightNote;
     
     // 获取问题文本
@@ -2822,18 +2870,23 @@ function showNoteModal(questionId, questionText, currentNote = '', readOnly = fa
       </label>
       <textarea id="note-input" placeholder="${readOnly ? '笔记内容（只读）' : '记录这个问题的重要性或原因，如：答案很不错、需要参考、重要信息等...'}" style="
         width: 100%;
-        height: 100px;
+        height: ${readOnly && currentNote ? 'auto' : '100px'};
+        min-height: 100px;
+        max-height: 300px;
         padding: 12px;
         border: 2px solid #e0e0e0;
         border-radius: 8px;
         font-size: 14px;
-        font-family: inherit;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif;
+        line-height: 1.5;
         resize: vertical;
         outline: none;
         transition: border-color 0.2s ease;
         box-sizing: border-box;
-        background: ${readOnly ? '#f5f5f5' : 'white'};
-        color: ${readOnly ? '#666' : '#333'};
+        background: ${readOnly ? '#f9f9f9' : 'white'};
+        color: ${readOnly ? '#555' : '#333'};
+        white-space: pre-wrap;
+        word-wrap: break-word;
       " ${readOnly ? 'readonly' : ''}>${currentNote}</textarea>
     </div>
     
@@ -3907,7 +3960,7 @@ function renderTimeline(userMessages) {
             <div style="display: flex; align-items: center; margin-bottom: 2px;">
               <span style="font-weight: 500; color: #b8860b;">📝 笔记:</span>
             </div>
-            <div style="word-break: break-word;">${noteText}</div>
+            <div style="word-break: break-word; white-space: pre-wrap; line-height: 1.5;">${noteText}</div>
           `;
           
           // 点击笔记区域也可以编辑
