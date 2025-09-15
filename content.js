@@ -1725,35 +1725,106 @@ function generateHighlightId(text) {
 
 // 查找相关的问题ID
 function findRelatedQuestionId(range) {
-  console.log('🔍 查找相关问题ID');
+  console.log('🔍 查找相关问题ID，基于划线位置');
   
-  // 直接使用processedUserMessages，它包含正确的数据结构
-  console.log('📋 processedUserMessages数量:', processedUserMessages.length);
+  // 获取划线的起始容器
+  const container = range.commonAncestorContainer;
+  let currentElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
   
-  if (processedUserMessages.length > 0) {
-    // 返回最后一个问题的ID（通常是当前对话中最新的问题）
-    const lastQuestion = processedUserMessages[processedUserMessages.length - 1];
+  console.log('📍 划线位置信息:', {
+    container: container.nodeName,
+    parentElement: currentElement.tagName,
+    parentClasses: currentElement.className
+  });
+  
+  // 向上遍历DOM，寻找包含这个划线的对话组
+  let conversationGroup = null;
+  let searchElement = currentElement;
+  
+  // 寻找对话组的特征元素
+  while (searchElement && searchElement !== document.body) {
+    // 检查是否是对话组的容器
+    if (searchElement.querySelector && 
+        (searchElement.querySelector('[data-message-author-role="user"]') || 
+         searchElement.querySelector('[class*="conversation"]') ||
+         searchElement.querySelector('[class*="message"]') ||
+         searchElement.hasAttribute('data-conversation-id'))) {
+      conversationGroup = searchElement;
+      console.log('🎯 找到对话组:', conversationGroup.tagName, conversationGroup.className);
+      break;
+    }
+    searchElement = searchElement.parentElement;
+  }
+  
+  if (conversationGroup) {
+    // 在这个对话组中寻找用户问题
+    const userQuestionSelectors = [
+      '[data-message-author-role="user"]',
+      '[class*="user"]',
+      '[class*="question"]'
+    ];
     
-    // 安全检查
-    console.log('📊 lastQuestion结构:', {
-      text: lastQuestion.text ? lastQuestion.text.substring(0, 30) + '...' : 'undefined',
-      keys: Object.keys(lastQuestion),
-      完整对象: lastQuestion
-    });
+    let userQuestion = null;
+    for (const selector of userQuestionSelectors) {
+      userQuestion = conversationGroup.querySelector(selector);
+      if (userQuestion) {
+        console.log('👤 找到用户问题元素:', selector);
+        break;
+      }
+    }
     
-    // 尝试多种可能的文本字段
-    const questionText = lastQuestion.text || 
-                        lastQuestion.content || 
-                        lastQuestion.textContent || 
-                        lastQuestion.innerText ||
-                        (lastQuestion.element ? lastQuestion.element.textContent : null) ||
-                        '未知问题';
+    if (userQuestion) {
+      const questionText = userQuestion.textContent?.trim() || '未知问题';
+      const questionId = generateQuestionId(questionText, window.location.href);
+      console.log('✅ 根据位置找到问题ID:', questionId.substring(0, 30) + '...', 
+                  '问题内容:', questionText.substring(0, 50) + '...');
+      return questionId;
+    }
+  }
+  
+  // 如果上述方法都失败，查找页面上距离划线位置最近的问题
+  console.log('🔄 尝试查找最近的问题...');
+  
+  // 获取划线元素的位置
+  const rect = range.getBoundingClientRect();
+  const highlightY = rect.top + window.scrollY;
+  
+  let closestQuestion = null;
+  let minDistance = Infinity;
+  
+  // 遍历所有已知问题，找到位置上最接近的
+  processedUserMessages.forEach((question, index) => {
+    if (question.element) {
+      const questionRect = question.element.getBoundingClientRect();
+      const questionY = questionRect.top + window.scrollY;
+      const distance = Math.abs(highlightY - questionY);
+      
+      // 只考虑在划线上方的问题（回答应该在问题下方）
+      if (questionY <= highlightY && distance < minDistance) {
+        minDistance = distance;
+        closestQuestion = question;
+      }
+    }
+  });
+  
+  if (closestQuestion) {
+    const questionText = closestQuestion.text || closestQuestion.content || '未知问题';
     const questionId = generateQuestionId(questionText, window.location.href);
-    console.log('✅ 使用问题ID:', questionId.substring(0, 30) + '...', '来自问题:', questionText.substring(0, 50) + '...');
+    console.log('✅ 找到最近的问题:', questionId.substring(0, 30) + '...', 
+                '距离:', minDistance + 'px', '问题:', questionText.substring(0, 50) + '...');
     return questionId;
   }
   
-  console.log('❌ 没有找到问题，返回unknown_question');
+  // 最后的兜底策略：使用最后一个问题
+  if (processedUserMessages.length > 0) {
+    const lastQuestion = processedUserMessages[processedUserMessages.length - 1];
+    const questionText = lastQuestion.text || lastQuestion.content || '未知问题';
+    const questionId = generateQuestionId(questionText, window.location.href);
+    console.log('⚠️ 使用兜底策略，最后一个问题:', questionId.substring(0, 30) + '...');
+    return questionId;
+  }
+  
+  console.log('❌ 完全没有找到问题，返回unknown_question');
   return 'unknown_question';
 }
 
@@ -2301,7 +2372,7 @@ async function renderGlobalView(filterType = 'all') {
       `;
 
       const displayText = bookmark.text || '未知问题';
-      questionTextSpan.textContent = `${index + 1}: ${displayText}`;
+      questionTextSpan.textContent = displayText;
 
       // 时间标签
       const timeSpan = document.createElement('div');
@@ -2592,7 +2663,7 @@ function createGlobalQuestionItem(questionId, bookmark, index, searchTerm = '') 
   `;
 
   const displayText = bookmark.text || '未知问题';
-  let highlightedText = `${index + 1}: ${displayText}`;
+  let highlightedText = displayText;
   
   // 搜索高亮
   if (searchTerm && displayText.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -2991,12 +3062,17 @@ function showNoteModal(questionId, questionText, currentNote = '', readOnly = fa
   // 保存备注（只在非只读模式下）
   if (!readOnly && saveBtn) {
     saveBtn.addEventListener('click', async () => {
-    const note = noteInput.value.trim();
+    let note = noteInput.value.trim();
     console.log('开始保存笔记:', {
       questionId,
       noteLength: note.length,
       currentBookmarksSize: bookmarkedQuestions.size
     });
+    
+    // 如果是新添加的手动笔记（不包含划线图标），添加红色铅笔图标
+    if (note && !note.includes('🖍️') && !note.includes('✏️')) {
+      note = `✏️ ${note}`;
+    }
     
     try {
       const result = await updateBookmarkNote(questionId, note);
@@ -3867,7 +3943,7 @@ function renderTimeline(userMessages) {
       `;
       
       const questionTextSpan = document.createElement('span');
-      questionTextSpan.textContent = `${index + 1}: ${displayText}`;
+      questionTextSpan.textContent = displayText;
       questionTextSpan.style.cssText = `
         flex: 1;
         cursor: pointer;
