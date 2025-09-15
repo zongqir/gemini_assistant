@@ -357,10 +357,11 @@ function createTimelineContainer() {
     font-size: 16px;
   `;
   header.innerHTML = `
-    <span>问题时间线</span>
+    <span>AI小助手</span>
     <div>
       <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; opacity: 0.7;">⭐</button>
       <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">📝</button>
+      <button id="highlights-toggle" title="查看所有划线内容" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🖍️</button>
       <button id="global-toggle" title="查看所有对话的标记和笔记" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🌐</button>
       <button id="clear-all-data" title="清除所有标记和笔记数据" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 8px; opacity: 0; display: none;">🗑️</button>
       <span id="question-count" style="font-size: 12px; opacity: 0.8; margin-right: 10px;">0 个问题</span>
@@ -580,7 +581,7 @@ function createTimelineContainer() {
     // 更新标题显示
     const titleSpan = document.querySelector('#gemini-timeline span');
     if (titleSpan) {
-      titleSpan.textContent = currentViewMode === 'global' ? '全局视图' : '问题时间线';
+      titleSpan.textContent = currentViewMode === 'global' ? '全局视图' : 'AI小助手';
     }
     
     if (currentViewMode === 'global') {
@@ -641,6 +642,12 @@ function createTimelineContainer() {
     }
   });
   
+  // 添加划线面板切换功能
+  document.getElementById('highlights-toggle').addEventListener('click', function() {
+    console.log('🖍️ [highlights-toggle] 按钮被点击');
+    showHighlightPanel();
+  });
+
   // 添加备注切换功能
   document.getElementById('notes-toggle').addEventListener('click', function() {
     console.log('🔍 [notes-toggle] 按钮被点击');
@@ -695,6 +702,7 @@ let lastScanTime = 0;
 let processedUserMessages = []; // 保存处理后的用户问题列表
 const SCAN_COOLDOWN = 1000; // 1秒冷却时间，避免过于频繁的扫描
 let lastQuestionEl = null;
+let commentTooltip = null; // 评论悬停提示
 
 // 标注相关变量
 let bookmarkedQuestions = new Map(); // 存储标注的问题 key: questionId, value: {text, url, timestamp}
@@ -1222,7 +1230,15 @@ function initHighlightFeature() {
   document.addEventListener('touchend', handleTextSelection);
   
   // 加载已保存的划线数据
-  loadHighlightData();
+  loadHighlightData().then(() => {
+    // 延迟恢复划线，确保页面内容已加载
+    setTimeout(() => {
+      restoreHighlightsOnPage();
+    }, 1000);
+    
+    // 监听页面内容变化，动态恢复划线
+    setupHighlightObserver();
+  });
 }
 
 // 处理文本选择
@@ -1399,6 +1415,74 @@ function showHighlightMenu(x, y, selectedText, range) {
     min-width: 200px;
   `;
   
+  // 创建颜色选择区域
+  const colorSection = document.createElement('div');
+  colorSection.style.cssText = `
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    background: #f9f9f9;
+  `;
+  
+  const colorLabel = document.createElement('span');
+  colorLabel.textContent = '颜色:';
+  colorLabel.style.cssText = `
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+  `;
+  colorSection.appendChild(colorLabel);
+  
+  // 定义高亮颜色选项
+  const colors = [
+    { name: 'yellow', color: '#ffeb3b', title: '黄色' },
+    { name: 'green', color: '#4caf50', title: '绿色' },
+    { name: 'blue', color: '#2196f3', title: '蓝色' },
+    { name: 'pink', color: '#e91e63', title: '粉色' },
+    { name: 'orange', color: '#ff9800', title: '橙色' }
+  ];
+  
+  let selectedColor = 'yellow'; // 默认颜色
+  
+  colors.forEach(colorInfo => {
+    const colorBtn = document.createElement('button');
+    colorBtn.dataset.color = colorInfo.name;
+    colorBtn.title = colorInfo.title;
+    colorBtn.style.cssText = `
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid ${colorInfo.name === selectedColor ? '#333' : '#ddd'};
+      background: ${colorInfo.color};
+      cursor: pointer;
+      transition: border-color 0.2s;
+    `;
+    
+    colorBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedColor = colorInfo.name;
+      
+      // 更新所有颜色按钮的边框
+      colors.forEach(c => {
+        const btn = colorSection.querySelector(`[data-color="${c.name}"]`);
+        btn.style.borderColor = c.name === selectedColor ? '#333' : '#ddd';
+      });
+    });
+    
+    colorSection.appendChild(colorBtn);
+  });
+  
+  // 按钮区域
+  const buttonSection = document.createElement('div');
+  buttonSection.style.cssText = `
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+  `;
+  
   // 划线按钮
   const highlightBtn = document.createElement('button');
   highlightBtn.textContent = '🖍️ 划线';
@@ -1410,6 +1494,7 @@ function showHighlightMenu(x, y, selectedText, range) {
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
+    flex: 1;
   `;
   
   // 评论按钮
@@ -1423,6 +1508,7 @@ function showHighlightMenu(x, y, selectedText, range) {
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
+    flex: 1;
   `;
   
   // 取消按钮
@@ -1438,12 +1524,16 @@ function showHighlightMenu(x, y, selectedText, range) {
     font-size: 12px;
   `;
   
+  buttonSection.appendChild(highlightBtn);
+  buttonSection.appendChild(commentBtn);
+  buttonSection.appendChild(cancelBtn);
+  
   // 事件处理
   highlightBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('🖍️ 划线按钮被点击');
-    createHighlight(selectedText, '', range);
+    console.log('🖍️ 划线按钮被点击，选择颜色:', selectedColor);
+    createHighlight(selectedText, '', range, selectedColor);
     menu.remove();
     window.getSelection().removeAllRanges();
   });
@@ -1451,8 +1541,8 @@ function showHighlightMenu(x, y, selectedText, range) {
   commentBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('💬 评论按钮被点击');
-    showHighlightCommentModal(selectedText, range);
+    console.log('💬 评论按钮被点击，选择颜色:', selectedColor);
+    showHighlightCommentModal(selectedText, range, selectedColor);
     menu.remove();
   });
   
@@ -1464,9 +1554,8 @@ function showHighlightMenu(x, y, selectedText, range) {
     window.getSelection().removeAllRanges();
   });
   
-  menu.appendChild(highlightBtn);
-  menu.appendChild(commentBtn);
-  menu.appendChild(cancelBtn);
+  menu.appendChild(colorSection);
+  menu.appendChild(buttonSection);
   
   console.log('📋 将菜单添加到页面:', menu);
   document.body.appendChild(menu);
@@ -1494,7 +1583,7 @@ function showHighlightMenu(x, y, selectedText, range) {
 }
 
 // 显示划线评论弹窗
-function showHighlightCommentModal(selectedText, range) {
+function showHighlightCommentModal(selectedText, range, color = 'yellow') {
   // 检测当前页面的主题模式
   const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
                      document.documentElement.classList.contains('dark') ||
@@ -1641,7 +1730,7 @@ function showHighlightCommentModal(selectedText, range) {
     const comment = commentInput.value.trim();
     console.log('📝 评论内容:', comment);
     
-    await createHighlight(selectedText, comment, range);
+    await createHighlight(selectedText, comment, range, color);
     modal.remove();
     window.getSelection().removeAllRanges();
   });
@@ -1656,7 +1745,7 @@ function showHighlightCommentModal(selectedText, range) {
 }
 
 // 创建划线
-async function createHighlight(text, comment, range) {
+async function createHighlight(text, comment, range, color = 'yellow') {
   console.log('🖍️ 开始创建划线:', { text: text.substring(0, 50) + '...', comment: comment || '无评论' });
   
   const highlightId = generateHighlightId(text);
@@ -1666,6 +1755,7 @@ async function createHighlight(text, comment, range) {
     id: highlightId,
     text: text,
     comment: comment,
+    color: color,
     questionId: questionId,
     timestamp: Date.now(),
     url: window.location.href,
@@ -1681,30 +1771,10 @@ async function createHighlight(text, comment, range) {
   // 保存到存储
   await saveHighlightData();
   
-  // 🔥 重要：自动创建对应的笔记记录，统一划线和笔记功能
-  console.log('🔄 自动为划线创建笔记记录...');
-  try {
-    // 检查是否已有该问题的笔记
-    const existingBookmark = bookmarkedQuestions.get(questionId);
-    let noteText = existingBookmark ? existingBookmark.note || '' : '';
-    
-    // 格式化划线内容，使用图标标识
-    const highlightNote = comment ? `🖍️ ${text}\n💭 ${comment}` : `🖍️ ${text}`;
-    noteText = noteText ? `${noteText}\n\n${highlightNote}` : highlightNote;
-    
-    // 获取问题文本
-    const questionText = processedUserMessages.length > 0 ? 
-      processedUserMessages[processedUserMessages.length - 1].text || '未知问题' : '未知问题';
-    
-    // 保存统一的笔记记录
-    await saveBookmark(questionId, questionText, noteText);
-    console.log('✅ 已自动创建笔记记录');
-  } catch (e) {
-    console.error('❌ 创建笔记记录失败:', e);
-  }
+  // 🖍️ 纯粹的划线功能 - 不与笔记混合
   
   // 在页面上高亮显示
-  highlightTextInDOM(range, highlightId);
+  highlightTextInDOM(range, highlightId, color);
   
   console.log('✅ 划线创建成功:', {
     text: text.substring(0, 50) + '...',
@@ -1829,21 +1899,65 @@ function findRelatedQuestionId(range) {
 }
 
 // 在DOM中高亮文本
-function highlightTextInDOM(range, highlightId) {
+function highlightTextInDOM(range, highlightId, color = 'yellow') {
   try {
     console.log('🎨 开始在DOM中高亮文本:', highlightId);
     
+    // 根据颜色设置不同的样式 - 真正的高对比度
+    const colorStyles = {
+      yellow: {
+        background: 'rgba(255, 235, 59, 0.9)',
+        borderBottom: '2px solid #ffc107',
+        boxShadow: '0 1px 3px rgba(255, 193, 7, 0.3)',
+        hoverBg: 'rgba(255, 235, 59, 1)',
+        textColor: '#000000'
+      },
+      green: {
+        background: 'rgba(76, 175, 80, 0.9)',
+        borderBottom: '2px solid #4caf50',
+        boxShadow: '0 1px 3px rgba(76, 175, 80, 0.3)',
+        hoverBg: 'rgba(76, 175, 80, 1)',
+        textColor: '#000000'
+      },
+      blue: {
+        background: 'rgba(33, 150, 243, 0.9)',
+        borderBottom: '2px solid #2196f3',
+        boxShadow: '0 1px 3px rgba(33, 150, 243, 0.3)',
+        hoverBg: 'rgba(33, 150, 243, 1)',
+        textColor: '#ffffff'
+      },
+      pink: {
+        background: 'rgba(233, 30, 99, 0.9)',
+        borderBottom: '2px solid #e91e63',
+        boxShadow: '0 1px 3px rgba(233, 30, 99, 0.3)',
+        hoverBg: 'rgba(233, 30, 99, 1)',
+        textColor: '#ffffff'
+      },
+      orange: {
+        background: 'rgba(255, 152, 0, 0.9)',
+        borderBottom: '2px solid #ff9800',
+        boxShadow: '0 1px 3px rgba(255, 152, 0, 0.3)',
+        hoverBg: 'rgba(255, 152, 0, 1)',
+        textColor: '#000000'
+      }
+    };
+    
+    const style = colorStyles[color] || colorStyles.yellow;
+    
     const span = document.createElement('span');
     span.style.cssText = `
-      background: rgba(255, 235, 59, 0.6) !important;
-      border-bottom: 2px solid #ffc107 !important;
+      background: ${style.background} !important;
+      color: ${style.textColor} !important;
+      border-bottom: ${style.borderBottom} !important;
       cursor: pointer !important;
       position: relative !important;
       padding: 2px 4px !important;
       border-radius: 3px !important;
-      box-shadow: 0 1px 3px rgba(255, 193, 7, 0.3) !important;
+      box-shadow: ${style.boxShadow} !important;
+      font-weight: 500 !important;
     `;
     span.dataset.highlightId = highlightId;
+    span.dataset.color = color;
     span.title = '🖍️ 点击查看划线详情';
     span.className = 'gemini-highlight';
     
@@ -1857,14 +1971,61 @@ function highlightTextInDOM(range, highlightId) {
     
     // 悬停效果
     span.addEventListener('mouseenter', () => {
-      span.style.background = 'rgba(255, 235, 59, 0.8) !important';
+      span.style.background = `${style.hoverBg} !important`;
     });
     
     span.addEventListener('mouseleave', () => {
-      span.style.background = 'rgba(255, 235, 59, 0.6) !important';
+      span.style.background = `${style.background} !important`;
     });
     
     range.surroundContents(span);
+    
+    // 在划线后添加视觉标识 - 更明显的区分
+    const indicator = document.createElement('span');
+    
+    // 获取划线数据来判断是否有评论
+    const highlightInfo = highlightData.get(highlightId);
+    if (highlightInfo && highlightInfo.comment) {
+      // 有评论 - 使用更明显的样式
+      indicator.style.cssText = `
+        font-size: 14px !important;
+        color: #ff5722 !important;
+        margin-left: 4px !important;
+        opacity: 1 !important;
+        user-select: none !important;
+        background: #fff !important;
+        border-radius: 50% !important;
+        padding: 2px !important;
+        border: 1px solid #ff5722 !important;
+        line-height: 1 !important;
+        display: inline-block !important;
+        cursor: pointer !important;
+      `;
+      indicator.textContent = '💬';
+      indicator.title = '点击查看评论内容';
+      
+      // 添加悬停显示评论的功能
+      indicator.addEventListener('mouseenter', () => {
+        showCommentTooltip(indicator, highlightInfo.comment);
+      });
+      indicator.addEventListener('mouseleave', () => {
+        hideCommentTooltip();
+      });
+    } else {
+      // 纯划线 - 简洁的标识
+      indicator.style.cssText = `
+        font-size: 12px !important;
+        color: #999 !important;
+        margin-left: 3px !important;
+        opacity: 0.6 !important;
+        user-select: none !important;
+      `;
+      indicator.textContent = '···';
+      indicator.title = '纯划线';
+    }
+    
+    // 将标识插入到划线元素后面
+    span.parentNode.insertBefore(indicator, span.nextSibling);
     console.log('✅ 文本已在页面高亮显示，元素:', span);
   } catch (error) {
     console.warn('⚠️ 无法在页面高亮显示文本:', error);
@@ -1909,6 +2070,30 @@ function showHighlightDetails(highlightId) {
     return;
   }
   
+  // 检测暗黑模式
+  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
+                     document.documentElement.classList.contains('dark') ||
+                     document.body.classList.contains('dark') ||
+                     document.querySelector('[data-theme="dark"]') ||
+                     getComputedStyle(document.body).backgroundColor === 'rgb(32, 33, 36)' ||
+                     getComputedStyle(document.documentElement).backgroundColor === 'rgb(32, 33, 36)';
+  
+  const colors = isDarkMode ? {
+    bg: '#2d2e30',
+    text: '#e8eaed',
+    subText: '#9aa0a6',
+    border: '#5f6368',
+    quoteBg: '#3c4043',
+    quoteBorder: '#8ab4f8'
+  } : {
+    bg: '#ffffff',
+    text: '#202124',
+    subText: '#5f6368',
+    border: '#dadce0',
+    quoteBg: '#f8f9fa',
+    quoteBorder: '#4285f4'
+  };
+  
   const modal = document.createElement('div');
   modal.style.cssText = `
     position: fixed;
@@ -1916,7 +2101,7 @@ function showHighlightDetails(highlightId) {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     z-index: 10001;
     display: flex;
     align-items: center;
@@ -1925,65 +2110,126 @@ function showHighlightDetails(highlightId) {
   
   const content = document.createElement('div');
   content.style.cssText = `
-    background: white;
+    background: ${colors.bg} !important;
+    color: ${colors.text} !important;
     border-radius: 12px;
     padding: 24px;
     max-width: 500px;
     width: 90%;
     max-height: 80vh;
     overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    border: 1px solid ${colors.border};
   `;
   
   const timeStr = new Date(highlight.timestamp).toLocaleString('zh-CN');
   
+  // 创建颜色选择器
+  const colorOptions = [
+    { name: 'yellow', color: '#ffeb3b', title: '黄色' },
+    { name: 'green', color: '#4caf50', title: '绿色' },
+    { name: 'blue', color: '#2196f3', title: '蓝色' },
+    { name: 'pink', color: '#e91e63', title: '粉色' },
+    { name: 'orange', color: '#ff9800', title: '橙色' }
+  ];
+  
+  let selectedColor = highlight.color || 'yellow';
+  
   content.innerHTML = `
-    <h3 style="margin: 0 0 16px 0; color: #333; font-size: 18px;">🖍️ 划线详情</h3>
+    <h3 style="margin: 0 0 16px 0; color: ${colors.text} !important; font-size: 18px;">🖍️ 划线详情</h3>
+    
+    <!-- 颜色选择器 -->
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: ${colors.subText} !important;">选择颜色：</label>
+      <div id="color-selector" style="display: flex; gap: 8px;">
+        ${colorOptions.map(colorInfo => `
+          <button class="color-option" data-color="${colorInfo.name}" style="
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 3px solid ${colorInfo.name === selectedColor ? '#333' : '#ddd'};
+            background: ${colorInfo.color};
+            cursor: pointer;
+            transition: all 0.2s;
+            outline: none;
+          " title="${colorInfo.title}"></button>
+        `).join('')}
+      </div>
+    </div>
     
     <div style="margin-bottom: 16px;">
-      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">划线内容：</label>
-      <div style="background: #fff3e0; padding: 12px; border-radius: 6px; border-left: 4px solid #ff9800; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: ${colors.subText} !important;">划线内容${highlight.comment ? '' : '...'}：</label>
+      <div style="background: ${colors.quoteBg} !important; color: ${colors.text} !important; padding: 12px; border-radius: 6px; border-left: 4px solid ${colors.quoteBorder}; font-size: 14px; line-height: 1.5; max-height: 120px; overflow-y: auto;">
         ${highlight.text}
       </div>
     </div>
     
     ${highlight.comment ? `
     <div style="margin-bottom: 16px;">
-      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #555;">💬 评论：</label>
-      <div style="background: #e8f5e8; padding: 12px; border-radius: 6px; border-left: 4px solid #4caf50; font-size: 14px; line-height: 1.5;">
+      <label style="display: block; margin-bottom: 8px; font-weight: 500; color: ${colors.subText} !important;">💬 评论：</label>
+      <div style="background: ${colors.quoteBg} !important; color: ${colors.text} !important; padding: 12px; border-radius: 6px; border-left: 4px solid #4caf50; font-size: 14px; line-height: 1.5;">
         ${highlight.comment}
       </div>
     </div>
     ` : ''}
     
-    <div style="margin-bottom: 20px; font-size: 12px; color: #666;">
+    <div style="margin-bottom: 20px; font-size: 12px; color: ${colors.subText} !important;">
       创建时间：${timeStr}
     </div>
     
     <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button id="save-color-btn" style="
+        background: #4285f4 !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
+      ">保存颜色</button>
       <button id="highlight-delete" style="
-        background: #ea4335;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
+        background: #ea4335 !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
       ">删除</button>
       <button id="highlight-close" style="
-        background: #4285f4;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
+        background: #6c757d !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
       ">关闭</button>
     </div>
   `;
   
   modal.appendChild(content);
   document.body.appendChild(modal);
+  
+  // 颜色选择逻辑
+  content.addEventListener('click', (e) => {
+    if (e.target.classList.contains('color-option')) {
+      // 更新选中的颜色
+      selectedColor = e.target.dataset.color;
+      
+      // 更新按钮样式
+      content.querySelectorAll('.color-option').forEach(btn => {
+        btn.style.borderColor = btn.dataset.color === selectedColor ? '#333' : '#ddd';
+      });
+    }
+  });
+  
+  // 保存颜色按钮
+  document.getElementById('save-color-btn').addEventListener('click', async () => {
+    await updateHighlightColor(highlightId, selectedColor);
+    modal.remove();
+    showToast('颜色已更新', 'success');
+  });
   
   // 事件处理
   document.getElementById('highlight-close').onclick = () => modal.remove();
@@ -1998,6 +2244,82 @@ function showHighlightDetails(highlightId) {
   modal.onclick = (e) => {
     if (e.target === modal) modal.remove();
   };
+}
+
+// 更新划线颜色
+async function updateHighlightColor(highlightId, newColor) {
+  console.log('🎨 更新划线颜色:', highlightId, newColor);
+  
+  // 更新内存中的数据
+  const highlight = highlightData.get(highlightId);
+  if (highlight) {
+    highlight.color = newColor;
+    highlightData.set(highlightId, highlight);
+    
+    // 保存到存储
+    await saveHighlightData();
+    
+    // 更新页面上的高亮样式
+    const highlightElement = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+    if (highlightElement) {
+      // 获取新颜色的样式 - 与主函数保持一致
+      const colorStyles = {
+        yellow: {
+          background: 'rgba(255, 235, 59, 0.9)',
+          borderBottom: '2px solid #ffc107',
+          boxShadow: '0 1px 3px rgba(255, 193, 7, 0.3)',
+          textColor: '#000000'
+        },
+        green: {
+          background: 'rgba(76, 175, 80, 0.9)',
+          borderBottom: '2px solid #4caf50',
+          boxShadow: '0 1px 3px rgba(76, 175, 80, 0.3)',
+          textColor: '#000000'
+        },
+        blue: {
+          background: 'rgba(33, 150, 243, 0.9)',
+          borderBottom: '2px solid #2196f3',
+          boxShadow: '0 1px 3px rgba(33, 150, 243, 0.3)',
+          textColor: '#ffffff'
+        },
+        pink: {
+          background: 'rgba(233, 30, 99, 0.9)',
+          borderBottom: '2px solid #e91e63',
+          boxShadow: '0 1px 3px rgba(233, 30, 99, 0.3)',
+          textColor: '#ffffff'
+        },
+        orange: {
+          background: 'rgba(255, 152, 0, 0.9)',
+          borderBottom: '2px solid #ff9800',
+          boxShadow: '0 1px 3px rgba(255, 152, 0, 0.3)',
+          textColor: '#000000'
+        }
+      };
+      
+      const style = colorStyles[newColor] || colorStyles.yellow;
+      
+      // 更新元素样式 - 使用cssText一次性更新
+      highlightElement.dataset.color = newColor;
+      highlightElement.style.cssText = `
+        background: ${style.background} !important;
+        color: ${style.textColor} !important;
+        padding: 2px 4px !important;
+        border-radius: 3px !important;
+        box-shadow: ${style.boxShadow} !important;
+        cursor: pointer !important;
+        border-bottom: ${style.borderBottom} !important;
+        position: relative !important;
+        z-index: 1 !important;
+        font-weight: 500 !important;
+      `;
+      
+      console.log('✅ 页面高亮样式已更新');
+    }
+    
+    console.log('✅ 划线颜色更新完成');
+  } else {
+    console.error('❌ 未找到划线数据:', highlightId);
+  }
 }
 
 // 删除划线
@@ -2041,6 +2363,641 @@ async function loadHighlightData() {
   } catch (error) {
     console.error('❌ 加载划线数据失败:', error);
   }
+}
+
+// 恢复页面上的所有划线显示
+function restoreHighlightsOnPage() {
+  console.log('🔄 开始恢复页面划线，当前数据量:', highlightData.size);
+  
+  if (highlightData.size === 0) {
+    console.log('📝 没有划线数据需要恢复');
+    return;
+  }
+  
+  // 获取当前页面URL，只恢复当前页面的划线
+  const currentUrl = window.location.href;
+  let restoredCount = 0;
+  
+  highlightData.forEach((highlight, highlightId) => {
+    // 只恢复当前页面的划线
+    if (highlight.url === currentUrl) {
+      console.log('🖍️ 尝试恢复划线:', {
+        id: highlightId,
+        text: highlight.text.substring(0, 30) + '...',
+        questionId: highlight.questionId.substring(0, 20) + '...'
+      });
+      
+      if (restoreHighlightInDOM(highlight, highlightId)) {
+        restoredCount++;
+      }
+    }
+  });
+  
+  console.log(`✅ 成功恢复了 ${restoredCount} 个划线`);
+  if (restoredCount > 0) {
+    showToast(`已恢复 ${restoredCount} 个划线`, 'success');
+  }
+}
+
+// 在DOM中恢复单个划线
+function restoreHighlightInDOM(highlight, highlightId) {
+  try {
+    console.log('🎨 恢复划线到DOM:', highlightId);
+    
+    // 使用文本匹配算法找到应该高亮的文本位置
+    const textToFind = highlight.text;
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function(node) {
+          // 只考虑在Gemini回答区域的文本节点
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          
+          // 检查是否在回答区域
+          const responseContainer = parent.closest('[class*="response"], [class*="model"], message-content');
+          if (!responseContainer) return NodeFilter.FILTER_REJECT;
+          
+          // 检查文本内容是否包含要查找的文本
+          const nodeText = node.textContent.trim();
+          if (nodeText.length < 10) return NodeFilter.FILTER_REJECT; // 忽略太短的文本节点
+          
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      },
+      false
+    );
+    
+    let found = false;
+    let textNode;
+    
+    // 遍历所有文本节点，寻找匹配的内容
+    while (textNode = walker.nextNode()) {
+      const nodeText = textNode.textContent;
+      const index = nodeText.indexOf(textToFind);
+      
+      if (index !== -1) {
+        console.log('🎯 找到匹配的文本节点:', nodeText.substring(index, index + 50) + '...');
+        
+        // 创建范围对象
+        const range = document.createRange();
+        range.setStart(textNode, index);
+        range.setEnd(textNode, index + textToFind.length);
+        
+        // 根据保存的颜色应用高亮 - 与主函数保持一致
+        const color = highlight.color || 'yellow';
+        const colorStyles = {
+          yellow: {
+            background: 'rgba(255, 235, 59, 0.9)',
+            borderBottom: '2px solid #ffc107',
+            boxShadow: '0 1px 3px rgba(255, 193, 7, 0.3)',
+            textColor: '#000000'
+          },
+          green: {
+            background: 'rgba(76, 175, 80, 0.9)',
+            borderBottom: '2px solid #4caf50',
+            boxShadow: '0 1px 3px rgba(76, 175, 80, 0.3)',
+            textColor: '#000000'
+          },
+          blue: {
+            background: 'rgba(33, 150, 243, 0.9)',
+            borderBottom: '2px solid #2196f3',
+            boxShadow: '0 1px 3px rgba(33, 150, 243, 0.3)',
+            textColor: '#ffffff'
+          },
+          pink: {
+            background: 'rgba(233, 30, 99, 0.9)',
+            borderBottom: '2px solid #e91e63',
+            boxShadow: '0 1px 3px rgba(233, 30, 99, 0.3)',
+            textColor: '#ffffff'
+          },
+          orange: {
+            background: 'rgba(255, 152, 0, 0.9)',
+            borderBottom: '2px solid #ff9800',
+            boxShadow: '0 1px 3px rgba(255, 152, 0, 0.3)',
+            textColor: '#000000'
+          }
+        };
+        
+        const style = colorStyles[color] || colorStyles.yellow;
+        
+        // 应用高亮
+        const span = document.createElement('span');
+        span.dataset.highlightId = highlightId;
+        span.dataset.color = color;
+        span.style.cssText = `
+          background: ${style.background} !important;
+          color: ${style.textColor} !important;
+          padding: 2px 4px !important;
+          border-radius: 3px !important;
+          box-shadow: ${style.boxShadow} !important;
+          cursor: pointer !important;
+          border-bottom: ${style.borderBottom} !important;
+          position: relative !important;
+          z-index: 1 !important;
+          font-weight: 500 !important;
+        `;
+        
+        try {
+          // 使用 surroundContents 包装选中的文本
+          range.surroundContents(span);
+          
+          // 添加点击事件
+          span.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showHighlightDetails(highlightId);
+          });
+          
+          // 添加视觉标识 - 与主函数保持一致
+          const indicator = document.createElement('span');
+          
+          if (highlight.comment) {
+            // 有评论 - 使用更明显的样式
+            indicator.style.cssText = `
+              font-size: 14px !important;
+              color: #ff5722 !important;
+              margin-left: 4px !important;
+              opacity: 1 !important;
+              user-select: none !important;
+              background: #fff !important;
+              border-radius: 50% !important;
+              padding: 2px !important;
+              border: 1px solid #ff5722 !important;
+              line-height: 1 !important;
+              display: inline-block !important;
+              cursor: pointer !important;
+            `;
+            indicator.textContent = '💬';
+            indicator.title = '点击查看评论内容';
+            
+            // 添加悬停显示评论的功能
+            indicator.addEventListener('mouseenter', () => {
+              showCommentTooltip(indicator, highlight.comment);
+            });
+            indicator.addEventListener('mouseleave', () => {
+              hideCommentTooltip();
+            });
+          } else {
+            // 纯划线 - 简洁的标识
+            indicator.style.cssText = `
+              font-size: 12px !important;
+              color: #999 !important;
+              margin-left: 3px !important;
+              opacity: 0.6 !important;
+              user-select: none !important;
+            `;
+            indicator.textContent = '···';
+            indicator.title = '纯划线';
+          }
+          
+          // 将标识插入到划线元素后面
+          span.parentNode.insertBefore(indicator, span.nextSibling);
+          
+          console.log('✅ 成功恢复划线:', highlightId);
+          found = true;
+          break;
+          
+        } catch (surroundError) {
+          console.log('⚠️ surroundContents失败，尝试手动替换');
+          
+          // 手动创建高亮元素
+          const beforeText = nodeText.substring(0, index);
+          const highlightText = nodeText.substring(index, index + textToFind.length);
+          const afterText = nodeText.substring(index + textToFind.length);
+          
+          // 创建新的文本节点和高亮节点
+          const beforeNode = document.createTextNode(beforeText);
+          const afterNode = document.createTextNode(afterText);
+          
+          span.textContent = highlightText;
+          span.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showHighlightDetails(highlightId);
+          });
+          
+          // 创建视觉标识 - 与主函数保持一致
+          const indicator = document.createElement('span');
+          
+          if (highlight.comment) {
+            // 有评论 - 使用更明显的样式
+            indicator.style.cssText = `
+              font-size: 14px !important;
+              color: #ff5722 !important;
+              margin-left: 4px !important;
+              opacity: 1 !important;
+              user-select: none !important;
+              background: #fff !important;
+              border-radius: 50% !important;
+              padding: 2px !important;
+              border: 1px solid #ff5722 !important;
+              line-height: 1 !important;
+              display: inline-block !important;
+              cursor: pointer !important;
+            `;
+            indicator.textContent = '💬';
+            indicator.title = '点击查看评论内容';
+            
+            // 添加悬停显示评论的功能
+            indicator.addEventListener('mouseenter', () => {
+              showCommentTooltip(indicator, highlight.comment);
+            });
+            indicator.addEventListener('mouseleave', () => {
+              hideCommentTooltip();
+            });
+          } else {
+            // 纯划线 - 简洁的标识
+            indicator.style.cssText = `
+              font-size: 12px !important;
+              color: #999 !important;
+              margin-left: 3px !important;
+              opacity: 0.6 !important;
+              user-select: none !important;
+            `;
+            indicator.textContent = '···';
+            indicator.title = '纯划线';
+          }
+          
+          // 替换原文本节点
+          const parent = textNode.parentNode;
+          parent.insertBefore(beforeNode, textNode);
+          parent.insertBefore(span, textNode);
+          parent.insertBefore(indicator, textNode);
+          parent.insertBefore(afterNode, textNode);
+          parent.removeChild(textNode);
+          
+          console.log('✅ 手动恢复划线成功:', highlightId);
+          found = true;
+          break;
+        }
+      }
+    }
+    
+    if (!found) {
+      console.log('❌ 未找到匹配的文本，可能页面内容已变化:', textToFind.substring(0, 50) + '...');
+    }
+    
+    return found;
+    
+  } catch (error) {
+    console.error('❌ 恢复划线失败:', error, highlightId);
+    return false;
+  }
+}
+
+// 设置高亮观察器，监听页面内容变化
+function setupHighlightObserver() {
+  console.log('👁️ 设置划线观察器');
+  
+  // 使用MutationObserver监听DOM变化
+  const observer = new MutationObserver((mutations) => {
+    let shouldRestore = false;
+    
+    mutations.forEach((mutation) => {
+      // 检查是否有新增的文本内容
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // 检查是否是Gemini回答相关的元素
+            if (node.matches && (
+                node.matches('[class*="response"]') ||
+                node.matches('[class*="model"]') ||
+                node.matches('message-content') ||
+                node.querySelector('[class*="response"], [class*="model"], message-content')
+              )) {
+              console.log('📝 检测到新的回答内容，准备恢复划线');
+              shouldRestore = true;
+            }
+          }
+        });
+      }
+    });
+    
+    // 防抖：避免频繁触发
+    if (shouldRestore) {
+      clearTimeout(window.highlightRestoreTimer);
+      window.highlightRestoreTimer = setTimeout(() => {
+        console.log('🔄 因内容变化重新恢复划线');
+        restoreHighlightsOnPage();
+      }, 500);
+    }
+  });
+  
+  // 开始观察
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: false,
+    characterData: false
+  });
+  
+  console.log('✅ 划线观察器已启动');
+}
+
+// 显示划线管理面板
+function showHighlightPanel() {
+  console.log('🖍️ 显示划线管理面板');
+  
+  // 移除现有面板
+  const existingPanel = document.getElementById('highlight-panel');
+  if (existingPanel) {
+    existingPanel.remove();
+  }
+  
+  // 创建面板
+  const panel = document.createElement('div');
+  panel.id = 'highlight-panel';
+  panel.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    z-index: 10002;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  // 获取当前页面的划线
+  const currentUrl = window.location.href;
+  const currentHighlights = Array.from(highlightData.values())
+    .filter(h => h.url === currentUrl)
+    .sort((a, b) => b.timestamp - a.timestamp);
+  
+  panel.innerHTML = `
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0; font-size: 18px;">🖍️ 划线管理 (${currentHighlights.length})</h3>
+      <button id="close-highlight-panel" style="background: none; border: none; color: white; cursor: pointer; font-size: 20px;">✖️</button>
+    </div>
+    
+    <div style="padding: 20px; max-height: calc(80vh - 120px); overflow-y: auto;" id="highlight-list">
+      ${currentHighlights.length === 0 ? 
+        '<div style="text-align: center; color: #666; padding: 40px;">还没有任何划线内容</div>' :
+        currentHighlights.map(highlight => createHighlightItem(highlight)).join('')
+      }
+    </div>
+    
+    <div style="padding: 16px; border-top: 1px solid #eee; text-align: right;">
+      <button id="clear-all-highlights" style="background: #ea4335; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-right: 8px;">清除所有划线</button>
+      <button id="close-panel" style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">关闭</button>
+    </div>
+  `;
+  
+  document.body.appendChild(panel);
+  
+  // 事件处理
+  document.getElementById('close-highlight-panel').addEventListener('click', () => panel.remove());
+  document.getElementById('close-panel').addEventListener('click', () => panel.remove());
+  
+  document.getElementById('clear-all-highlights').addEventListener('click', async () => {
+    if (confirm('确定要清除当前页面的所有划线吗？此操作不可恢复。')) {
+      // 清除当前页面的所有划线
+      for (const highlight of currentHighlights) {
+        await deleteHighlight(highlight.id);
+      }
+      panel.remove();
+      showToast('已清除所有划线', 'success');
+    }
+  });
+  
+  // 事件委托处理划线条目的操作
+  panel.addEventListener('click', async (e) => {
+    if (e.target === panel) {
+      panel.remove();
+      return;
+    }
+    
+    // 处理定位按钮
+    if (e.target.classList.contains('scroll-to-highlight')) {
+      e.stopPropagation();
+      const highlightId = e.target.dataset.highlightId;
+      scrollToHighlight(highlightId);
+    }
+    
+    // 处理删除按钮
+    if (e.target.classList.contains('delete-highlight')) {
+      e.stopPropagation();
+      const highlightId = e.target.dataset.highlightId;
+      if (confirm('确定要删除这个划线吗？')) {
+        await deleteHighlight(highlightId);
+        // 重新渲染面板
+        showHighlightPanel();
+      }
+    }
+  });
+  
+  // 评论悬停事件
+  panel.addEventListener('mouseover', (e) => {
+    if (e.target.closest('.comment-hover-container')) {
+      const container = e.target.closest('.comment-hover-container');
+      const tooltip = container.querySelector('.comment-tooltip');
+      if (tooltip) {
+        tooltip.style.display = 'block';
+      }
+    }
+  });
+  
+  panel.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget || !e.target.closest('.comment-hover-container')?.contains(e.relatedTarget)) {
+      const container = e.target.closest('.comment-hover-container');
+      if (container) {
+        const tooltip = container.querySelector('.comment-tooltip');
+        if (tooltip) {
+          tooltip.style.display = 'none';
+        }
+      }
+    }
+  });
+}
+
+// 创建划线条目
+function createHighlightItem(highlight) {
+  const colorDot = {
+    yellow: '#ffeb3b',
+    green: '#4caf50', 
+    blue: '#2196f3',
+    pink: '#e91e63',
+    orange: '#ff9800'
+  }[highlight.color] || '#ffeb3b';
+  
+  const date = new Date(highlight.timestamp).toLocaleString();
+  
+  return `
+    <div class="highlight-item" data-highlight-id="${highlight.id}" style="
+      border: 1px solid #eee;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    ">
+      <div style="display: flex; align-items: center; margin-bottom: 8px;">
+        <div style="width: 12px; height: 12px; border-radius: 50%; background: ${colorDot}; margin-right: 8px;"></div>
+        <span style="font-size: 12px; color: #666;">${date}</span>
+        <div style="flex: 1;"></div>
+        <button class="scroll-to-highlight" data-highlight-id="${highlight.id}" style="
+          background: #007bff;
+          color: white;
+          border: none;
+          padding: 4px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 11px;
+          margin-right: 4px;
+        ">定位</button>
+        <button class="delete-highlight" data-highlight-id="${highlight.id}" style="
+          background: #dc3545;
+          color: white;
+          border: none;
+          padding: 4px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 11px;
+        ">删除</button>
+      </div>
+      
+      <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid ${colorDot}; margin-bottom: 8px; position: relative;">
+        <div style="font-size: 14px; line-height: 1.4; color: #333;">${highlight.text}</div>
+        ${!highlight.comment ? '<div style="position: absolute; top: 8px; right: 8px; color: #999; font-size: 12px;">...</div>' : ''}
+      </div>
+      
+      ${highlight.comment ? `
+        <div class="comment-hover-container" style="background: #e3f2fd; padding: 8px; border-radius: 4px; border-left: 3px solid #2196f3; position: relative; cursor: pointer;">
+          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">💬 评论:::</div>
+          <div class="comment-preview" style="font-size: 13px; color: #555; max-height: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${highlight.comment.length > 50 ? highlight.comment.substring(0, 50) + '...' : highlight.comment}
+          </div>
+          <div class="comment-tooltip" style="
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            background: #333;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10003;
+            display: none;
+            margin-bottom: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            word-wrap: break-word;
+          ">${highlight.comment}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// 滚动到指定划线位置
+// 显示评论悬停提示
+function showCommentTooltip(element, comment) {
+  // 如果已存在提示，先移除
+  hideCommentTooltip();
+  
+  commentTooltip = document.createElement('div');
+  commentTooltip.style.cssText = `
+    position: fixed !important;
+    background: #333 !important;
+    color: #fff !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    max-width: 300px !important;
+    word-wrap: break-word !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    z-index: 100000 !important;
+    pointer-events: none !important;
+    white-space: pre-wrap !important;
+  `;
+  commentTooltip.textContent = comment;
+  
+  // 计算位置
+  const rect = element.getBoundingClientRect();
+  commentTooltip.style.left = `${rect.left + window.scrollX}px`;
+  commentTooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+  
+  document.body.appendChild(commentTooltip);
+}
+
+// 隐藏评论悬停提示
+function hideCommentTooltip() {
+  if (commentTooltip) {
+    commentTooltip.remove();
+    commentTooltip = null;
+  }
+}
+
+function scrollToHighlight(highlightId) {
+  console.log('📍 滚动到划线位置:', highlightId);
+  
+  // 查找页面上对应的高亮元素
+  const highlightElement = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+  
+  if (highlightElement) {
+    // 滚动到元素位置，并在顶部留出一些空间
+    highlightElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest'
+    });
+    
+    // 添加临时的闪烁效果提示用户位置
+    const originalStyle = highlightElement.style.cssText;
+    
+    // 创建闪烁动画
+    let blinkCount = 0;
+    const blinkInterval = setInterval(() => {
+      if (blinkCount % 2 === 0) {
+        highlightElement.style.boxShadow = '0 0 15px rgba(255, 0, 0, 0.7) !important';
+        highlightElement.style.transform = 'scale(1.05) !important';
+      } else {
+        highlightElement.style.boxShadow = highlightElement.dataset.color ? 
+          getOriginalShadow(highlightElement.dataset.color) : '0 1px 3px rgba(255, 193, 7, 0.3) !important';
+        highlightElement.style.transform = 'scale(1) !important';
+      }
+      
+      blinkCount++;
+      if (blinkCount >= 6) { // 闪烁3次
+        clearInterval(blinkInterval);
+        // 恢复原始样式
+        highlightElement.style.cssText = originalStyle;
+      }
+    }, 300);
+    
+    console.log('✅ 已滚动到划线位置');
+    
+    // 关闭面板（可选）
+    const panel = document.getElementById('highlight-panel');
+    if (panel) {
+      panel.remove();
+    }
+    
+  } else {
+    console.log('❌ 未找到对应的划线元素，可能需要重新渲染');
+    showToast('未找到对应的划线，可能页面内容已变化', 'error');
+  }
+}
+
+// 获取原始阴影样式
+function getOriginalShadow(color) {
+  const shadows = {
+    yellow: '0 1px 3px rgba(255, 193, 7, 0.3)',
+    green: '0 1px 3px rgba(76, 175, 80, 0.3)',
+    blue: '0 1px 3px rgba(33, 150, 243, 0.3)',
+    pink: '0 1px 3px rgba(233, 30, 99, 0.3)',
+    orange: '0 1px 3px rgba(255, 152, 0, 0.3)'
+  };
+  return `${shadows[color] || shadows.yellow} !important`;
 }
 
 // 清理过期的划线
