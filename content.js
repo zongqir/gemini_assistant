@@ -5,169 +5,6 @@ console.log('🔥🔥🔥 GEMINI TIMELINE CONTENT SCRIPT LOADED 🔥🔥🔥');
 console.log('当前页面URL:', window.location.href);
 console.log('当前时间:', new Date().toLocaleString());
 
-console.log('🔍 诊断页面环境...');
-
-// 诊断1: 检查CSP
-console.log('CSP策略:', document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content || '无');
-
-// 诊断2: 尝试多种注入方式
-const methods = [
-  {
-    name: '方法1: 内联script注入',
-    test: () => {
-      const script = document.createElement('script');
-      script.textContent = 'window.TEST_METHOD_1 = "success"; console.log("方法1执行成功");';
-      document.head.appendChild(script);
-      script.remove();
-      return 'window.TEST_METHOD_1';
-    }
-  },
-  {
-    name: '方法2: 外部script注入',
-    test: () => {
-      const script = document.createElement('script');
-      script.src = 'data:text/javascript,window.TEST_METHOD_2="success";console.log("方法2执行成功");';
-      document.head.appendChild(script);
-      return 'window.TEST_METHOD_2';
-    }
-  },
-  {
-    name: '方法3: eval注入',
-    test: () => {
-      try {
-        const code = 'window.TEST_METHOD_3 = "success"; console.log("方法3执行成功");';
-        const script = document.createElement('script');
-        script.appendChild(document.createTextNode(`(function(){${code}})()`));
-        document.head.appendChild(script);
-        script.remove();
-        return 'window.TEST_METHOD_3';
-      } catch(e) {
-        console.error('方法3失败:', e);
-        return false;
-      }
-    }
-  }
-];
-
-// 测试所有方法
-methods.forEach((method, index) => {
-  console.log(`🧪 测试 ${method.name}...`);
-  try {
-    const result = method.test();
-    if (result) {
-      setTimeout(() => {
-        // 检查是否成功
-        const script = document.createElement('script');
-        script.textContent = `
-          if (${result}) {
-            console.log('✅ ${method.name} 成功!');
-          } else {
-            console.log('❌ ${method.name} 失败');
-          }
-        `;
-        document.head.appendChild(script);
-        script.remove();
-      }, 100 * (index + 1));
-    }
-  } catch (e) {
-    console.error(`❌ ${method.name} 出错:`, e);
-  }
-});
-
-// 最终兜底方案：直接使用DOM属性
-console.log('🔄 使用DOM属性作为调试接口...');
-document.documentElement.setAttribute('data-gemini-debug-ready', 'true');
-
-// 创建调试接口
-const debugInterface = {
-  getHighlights: function() {
-    const elements = document.querySelectorAll('.gemini-highlight');
-    console.log('🔍 页面高亮元素数量:', elements.length);
-    return elements.length;
-  },
-  triggerContentDebug: function() {
-    document.dispatchEvent(new CustomEvent('GEMINI_DEBUG_CONTENT_SCRIPT'));
-    return 'triggered';
-  }
-};
-
-// 暴露到全局
-window.GEMINI_DEBUG = debugInterface;
-console.log('✅ 调试接口已设置: window.GEMINI_DEBUG');
-console.log('🧪 使用方法: window.GEMINI_DEBUG.getHighlights()');
-console.log('🧪 使用方法: window.GEMINI_DEBUG.triggerContentDebug()');
-
-console.log('🔍 检查函数是否真的设置了...');
-console.log('GEMINI_TIMELINE_TEST 类型:', typeof window.GEMINI_TIMELINE_TEST);
-console.log('debugHighlights 类型:', typeof window.debugHighlights);
-
-// 延迟检查，以防异步问题
-setTimeout(() => {
-  console.log('⏰ 5秒后检查函数状态:');
-  console.log('GEMINI_TIMELINE_TEST 类型:', typeof window.GEMINI_TIMELINE_TEST);
-  console.log('debugHighlights 类型:', typeof window.debugHighlights);
-  
-  // 尝试直接调用测试
-  try {
-    console.log('🧪 尝试直接调用测试函数...');
-    const result = window.GEMINI_TIMELINE_TEST();
-    console.log('✅ 测试函数调用成功:', result);
-  } catch (e) {
-    console.error('❌ 测试函数调用失败:', e);
-  }
-}, 5000);
-
-// 监听来自页面注入脚本的调试请求
-document.addEventListener('GEMINI_DEBUG_CONTENT_SCRIPT', function() {
-  console.log('🔍 Content Script 收到调试请求');
-  
-  try {
-    console.log('📊 Content Script 调试信息:');
-    console.log('highlightData类型:', typeof highlightData);
-    console.log('highlightData大小:', typeof highlightData !== 'undefined' ? highlightData.size : '未定义');
-    
-    if (typeof highlightData !== 'undefined' && highlightData.size > 0) {
-      console.log('所有划线数据:', Array.from(highlightData.entries()));
-    }
-    
-    // 检查问题列表
-    console.log('processedUserMessages类型:', typeof processedUserMessages);
-    console.log('processedUserMessages数量:', typeof processedUserMessages !== 'undefined' ? processedUserMessages.length : '未定义');
-    
-    if (typeof processedUserMessages !== 'undefined' && processedUserMessages && processedUserMessages.length > 0) {
-      processedUserMessages.forEach((msg, index) => {
-        console.log(`问题 ${index + 1} 结构:`, {
-          keys: Object.keys(msg),
-          完整对象: msg
-        });
-      });
-    }
-    
-    // 检查bookmarkedQuestions
-    console.log('bookmarkedQuestions类型:', typeof bookmarkedQuestions);
-    console.log('bookmarkedQuestions大小:', typeof bookmarkedQuestions !== 'undefined' ? bookmarkedQuestions.size : '未定义');
-    
-  } catch (e) {
-    console.error('🚨 Content Script 调试执行错误:', e);
-  }
-});
-
-// 提供替代的调用方式
-console.log('🧪 如果直接调用不行，可以尝试:');
-console.log('document.dispatchEvent(new CustomEvent("GEMINI_DEBUG_REQUEST"))');
-
-// 强制重新设置函数（以防被覆盖）
-setInterval(() => {
-  if (typeof window.debugHighlights === 'undefined') {
-    console.log('🔧 检测到函数丢失，重新设置...');
-    window.debugHighlights = function() {
-      console.log('🔍 调试划线功能 (重新设置版本):');
-      console.log('highlightData类型:', typeof highlightData);
-      console.log('页面高亮元素:', document.querySelectorAll('.gemini-highlight').length);
-    };
-  }
-}, 1000);
-
 // 监听页面加载完成
 window.addEventListener('load', function() {
   console.log('📄 页面加载完成，调用initPlugin');
@@ -200,8 +37,6 @@ function initPlugin() {
     console.log('❌ 不在Gemini页面，跳过初始化');
   }
 }
-
-// setupDebugFunctions 函数已移除，调试函数在脚本开头立即设置
 
 // 简化的初始化函数
 async function initializeTimeline() {
@@ -3260,7 +3095,7 @@ function createHighlightItem(highlight) {
       </div>
       
       <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid ${colorDot}; margin-bottom: 8px;">
-        <div style="font-size: 14px; line-height: 1.4; color: #333;">${highlight.text}</div>
+                <div style="font-size: 14px; line-height: 1.4; color: #333;">${highlight.text}</div>
       </div>
       
       ${highlight.comment ? `
@@ -5660,5 +5495,3 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 保持消息通道开放，等待异步响应
   }
 });
-
-// 调试函数已在 setupDebugFunctions() 中设置
