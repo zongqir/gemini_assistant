@@ -362,6 +362,7 @@ function createTimelineContainer() {
       <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; opacity: 0.7;">⭐</button>
       <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">📝</button>
       <button id="highlights-toggle" title="查看所有划线内容" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🖍️</button>
+      <button id="restore-highlights" title="刷新后点此恢复划线显示" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 6px; opacity: 0.7;">🔄</button>
       <button id="global-toggle" title="查看所有对话的标记和笔记" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🌐</button>
       <button id="clear-all-data" title="清除所有标记和笔记数据" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 8px; opacity: 0; display: none;">🗑️</button>
       <span id="question-count" style="font-size: 12px; opacity: 0.8; margin-right: 10px;">0 个问题</span>
@@ -646,6 +647,55 @@ function createTimelineContainer() {
   document.getElementById('highlights-toggle').addEventListener('click', function() {
     console.log('🖍️ [highlights-toggle] 按钮被点击');
     showHighlightPanel();
+  });
+  
+  // 添加手动恢复划线功能
+  document.getElementById('restore-highlights').addEventListener('click', async function() {
+    console.log('🔄 [restore-highlights] 手动恢复按钮被点击');
+    
+    // 显示加载状态
+    this.style.opacity = '0.3';
+    this.textContent = '⏳';
+    
+    try {
+      // 先清除现有的划线（避免重复）
+      const existingHighlights = document.querySelectorAll('[data-highlight-id]');
+      console.log('🧹 清除现有划线:', existingHighlights.length);
+      existingHighlights.forEach(el => {
+        // 移除划线元素，但保留文本内容
+        const parent = el.parentNode;
+        const textContent = el.textContent;
+        const textNode = document.createTextNode(textContent);
+        parent.insertBefore(textNode, el);
+        el.remove();
+        
+        // 同时移除相邻的标识符
+        const nextSibling = textNode.nextSibling;
+        if (nextSibling && (nextSibling.textContent === '💬' || nextSibling.textContent === '···')) {
+          nextSibling.remove();
+        }
+      });
+      
+      // 等待一下确保清理完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 强制重新恢复所有划线
+      const restoredCount = await restoreHighlightsOnPage();
+      
+      if (restoredCount > 0) {
+        showToast(`手动恢复了 ${restoredCount} 个划线`, 'success');
+      } else {
+        showToast('没有找到需要恢复的划线', 'info');
+      }
+      
+    } catch (error) {
+      console.error('❌ 手动恢复失败:', error);
+      showToast('恢复失败，请刷新页面重试', 'error');
+    } finally {
+      // 恢复按钮状态
+      this.style.opacity = '0.7';
+      this.textContent = '🔄';
+    }
   });
 
   // 添加备注切换功能
@@ -1231,10 +1281,58 @@ function initHighlightFeature() {
   
   // 加载已保存的划线数据
   loadHighlightData().then(() => {
-    // 延迟恢复划线，确保页面内容已加载
+    // 多层级恢复机制，确保划线能够正确显示
+    console.log('🚀 开始多层级恢复机制');
+    
+    // 第一次尝试：立即恢复（如果内容已经加载）
     setTimeout(() => {
+      console.log('⏰ 第一次恢复尝试（1秒后）');
       restoreHighlightsOnPage();
     }, 1000);
+    
+    // 第二次尝试：稍后再试（处理慢加载的内容）
+    setTimeout(() => {
+      console.log('⏰ 第二次恢复尝试（3秒后）');
+      const currentCount = document.querySelectorAll('[data-highlight-id]').length;
+      console.log('📊 当前页面已有划线数量:', currentCount, '存储中应有:', highlightData.size);
+      
+      if (currentCount < highlightData.size) {
+        console.log('🔄 检测到划线缺失，强制恢复');
+        restoreHighlightsOnPage();
+      }
+    }, 3000);
+    
+    // 第三次尝试：最后保险（处理动态加载内容）
+    setTimeout(() => {
+      console.log('⏰ 第三次恢复尝试（6秒后）');
+      const currentCount = document.querySelectorAll('[data-highlight-id]').length;
+      const expectedCount = Array.from(highlightData.values()).filter(h => h.url === window.location.href).length;
+      
+      console.log('📊 最终检查 - 页面划线:', currentCount, '预期划线:', expectedCount);
+      
+      if (currentCount < expectedCount) {
+        console.log('🆘 最后机会恢复划线');
+        restoreHighlightsOnPage();
+      }
+    }, 6000);
+    
+    // 第四次尝试：超长延迟（处理极慢的加载）
+    setTimeout(() => {
+      console.log('⏰ 第四次恢复尝试（10秒后）- 针对慢加载');
+      const currentCount = document.querySelectorAll('[data-highlight-id]').length;
+      const expectedCount = Array.from(highlightData.values()).filter(h => h.url === window.location.href).length;
+      
+      console.log('📊 超长延迟检查 - 页面划线:', currentCount, '预期划线:', expectedCount);
+      console.log('🔍 页面状态检查:');
+      console.log('  - document.readyState:', document.readyState);
+      console.log('  - 页面文本长度:', (document.body.textContent || '').length);
+      console.log('  - Gemini回答区域数量:', document.querySelectorAll('[class*="response"], [class*="model"]').length);
+      
+      if (currentCount < expectedCount) {
+        console.log('🔥 终极恢复尝试');
+        restoreHighlightsOnPage();
+      }
+    }, 10000);
     
     // 监听页面内容变化，动态恢复划线
     setupHighlightObserver();
@@ -1955,6 +2053,10 @@ function highlightTextInDOM(range, highlightId, color = 'yellow') {
       border-radius: 3px !important;
       box-shadow: ${style.boxShadow} !important;
       font-weight: 500 !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      word-break: normal !important;
+      display: inline !important;
     `;
     span.dataset.highlightId = highlightId;
     span.dataset.color = color;
@@ -2004,12 +2106,29 @@ function highlightTextInDOM(range, highlightId, color = 'yellow') {
       indicator.textContent = '💬';
       indicator.title = '点击查看评论内容';
       
-      // 添加悬停显示评论的功能
-      indicator.addEventListener('mouseenter', () => {
-        showCommentTooltip(indicator, highlightInfo.comment);
+      // 添加悬停显示评论的功能 - 增强稳定性
+      indicator.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        console.log('🖱️ 鼠标进入评论图标');
+        setTimeout(() => {
+          showCommentTooltip(indicator, highlightInfo.comment);
+        }, 100);
       });
-      indicator.addEventListener('mouseleave', () => {
-        hideCommentTooltip();
+      indicator.addEventListener('mouseleave', (e) => {
+        e.stopPropagation();
+        console.log('🖱️ 鼠标离开评论图标');
+        setTimeout(() => {
+          hideCommentTooltip();
+        }, 150);
+      });
+      
+      // 添加点击事件也显示评论
+      indicator.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showCommentTooltip(indicator, highlightInfo.comment);
+        setTimeout(() => {
+          hideCommentTooltip();
+        }, 3000); // 3秒后自动隐藏
       });
     } else {
       // 纯划线 - 简洁的标识
@@ -2024,8 +2143,30 @@ function highlightTextInDOM(range, highlightId, color = 'yellow') {
       indicator.title = '纯划线';
     }
     
-    // 将标识插入到划线元素后面
-    span.parentNode.insertBefore(indicator, span.nextSibling);
+    // 将标识插入到划线元素后面 - 处理列表结构
+    try {
+      // 检查是否在列表项中
+      const listItem = span.closest('li, ol, ul');
+      if (listItem) {
+        // 在列表项中，使用特殊的定位方式
+        const wrapper = document.createElement('span');
+        wrapper.style.cssText = 'white-space: nowrap; display: inline;';
+        
+        // 将span和indicator都放入wrapper中
+        span.parentNode.insertBefore(wrapper, span);
+        wrapper.appendChild(span);
+        wrapper.appendChild(indicator);
+      } else {
+        // 正常情况
+        span.parentNode.insertBefore(indicator, span.nextSibling);
+      }
+    } catch (error) {
+      console.warn('⚠️ 标识插入失败，使用备用方法:', error);
+      // 备用方法：将标识追加到span内部
+      indicator.style.position = 'relative';
+      indicator.style.display = 'inline';
+      span.appendChild(indicator);
+    }
     console.log('✅ 文本已在页面高亮显示，元素:', span);
   } catch (error) {
     console.warn('⚠️ 无法在页面高亮显示文本:', error);
@@ -2041,6 +2182,10 @@ function highlightTextInDOM(range, highlightId, color = 'yellow') {
         cursor: pointer !important;
         padding: 2px 4px !important;
         border-radius: 3px !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: normal !important;
+        display: inline !important;
       `;
       span.dataset.highlightId = highlightId;
       span.title = '🖍️ 点击查看划线详情';
@@ -2311,6 +2456,10 @@ async function updateHighlightColor(highlightId, newColor) {
         position: relative !important;
         z-index: 1 !important;
         font-weight: 500 !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: normal !important;
+        display: inline !important;
       `;
       
       console.log('✅ 页面高亮样式已更新');
@@ -2367,36 +2516,97 @@ async function loadHighlightData() {
 
 // 恢复页面上的所有划线显示
 function restoreHighlightsOnPage() {
-  console.log('🔄 开始恢复页面划线，当前数据量:', highlightData.size);
-  
-  if (highlightData.size === 0) {
-    console.log('📝 没有划线数据需要恢复');
-    return;
-  }
-  
-  // 获取当前页面URL，只恢复当前页面的划线
-  const currentUrl = window.location.href;
-  let restoredCount = 0;
-  
-  highlightData.forEach((highlight, highlightId) => {
-    // 只恢复当前页面的划线
-    if (highlight.url === currentUrl) {
-      console.log('🖍️ 尝试恢复划线:', {
-        id: highlightId,
-        text: highlight.text.substring(0, 30) + '...',
-        questionId: highlight.questionId.substring(0, 20) + '...'
-      });
-      
-      if (restoreHighlightInDOM(highlight, highlightId)) {
-        restoredCount++;
-      }
+  return new Promise((resolve) => {
+    console.log('🔄 开始恢复页面划线，当前数据量:', highlightData.size);
+    
+    if (highlightData.size === 0) {
+      console.log('📝 没有划线数据需要恢复');
+      resolve(0);
+      return;
     }
+    
+    // 获取当前页面URL，只恢复当前页面的划线
+    const currentUrl = window.location.href;
+    let restoredCount = 0;
+    let attemptedCount = 0;
+    
+    console.log('🌍 当前页面URL:', currentUrl);
+    
+    highlightData.forEach((highlight, highlightId) => {
+      // 只恢复当前页面的划线
+      if (highlight.url === currentUrl) {
+        attemptedCount++;
+        console.log(`🖍️ [${attemptedCount}] 尝试恢复划线:`, {
+          id: highlightId.substring(0, 10) + '...',
+          text: highlight.text.substring(0, 50) + '...',
+          questionId: highlight.questionId ? highlight.questionId.substring(0, 20) + '...' : 'null',
+          comment: highlight.comment ? '有评论' : '无评论'
+        });
+        
+        // 检查是否已经存在
+        const existingElement = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+        if (existingElement) {
+          console.log(`⚠️ 划线已存在，跳过: ${highlightId.substring(0, 10)}...`);
+          restoredCount++;
+        } else {
+          if (restoreHighlightInDOM(highlight, highlightId)) {
+            restoredCount++;
+            console.log(`✅ 成功恢复划线: ${highlightId.substring(0, 10)}...`);
+          } else {
+            console.log(`❌ 恢复失败: ${highlightId.substring(0, 10)}...`);
+          }
+        }
+      }
+    });
+    
+    console.log(`📊 恢复统计 - 尝试: ${attemptedCount}, 成功: ${restoredCount}`);
+    
+    if (restoredCount > 0) {
+      showToast(`已恢复 ${restoredCount} 个划线`, 'success');
+    } else if (attemptedCount > 0) {
+      console.warn('⚠️ 有划线数据但无法恢复，可能页面结构已变化');
+      showToast('划线恢复遇到问题，请尝试刷新页面', 'warning');
+    }
+    
+    resolve(restoredCount);
   });
+}
+
+// 文本规范化函数，去除格式差异
+function normalizeText(text) {
+  return text
+    .replace(/\s+/g, ' ')  // 将多个空白字符替换为单个空格
+    .replace(/[\u200B-\u200F\uFEFF]/g, '') // 移除零宽字符
+    .trim(); // 去除首尾空白
+}
+
+// 计算文本相似度（简化版）
+function calculateSimilarity(text1, text2) {
+  const norm1 = normalizeText(text1);
+  const norm2 = normalizeText(text2);
   
-  console.log(`✅ 成功恢复了 ${restoredCount} 个划线`);
-  if (restoredCount > 0) {
-    showToast(`已恢复 ${restoredCount} 个划线`, 'success');
+  // 完全匹配
+  if (norm1 === norm2) return 1.0;
+  
+  // 包含匹配
+  if (norm2.includes(norm1) || norm1.includes(norm2)) {
+    const shorter = norm1.length < norm2.length ? norm1 : norm2;
+    const longer = norm1.length >= norm2.length ? norm1 : norm2;
+    return shorter.length / longer.length;
   }
+  
+  // 子字符串匹配（至少30%重叠）
+  const minLength = Math.min(norm1.length, norm2.length);
+  if (minLength < 10) return 0; // 太短的文本不进行模糊匹配
+  
+  for (let i = 0; i <= norm1.length - minLength * 0.3; i++) {
+    const substring = norm1.substring(i, i + Math.floor(minLength * 0.6));
+    if (substring.length > 5 && norm2.includes(substring)) {
+      return 0.6; // 部分匹配
+    }
+  }
+  
+  return 0;
 }
 
 // 在DOM中恢复单个划线
@@ -2406,6 +2616,23 @@ function restoreHighlightInDOM(highlight, highlightId) {
     
     // 使用文本匹配算法找到应该高亮的文本位置
     const textToFind = highlight.text;
+    const normalizedTarget = normalizeText(textToFind);
+    console.log('🔍 寻找文本:', {
+      original: textToFind.substring(0, 50) + '...',
+      normalized: normalizedTarget.substring(0, 50) + '...'
+    });
+    
+    // 在开始遍历前，先检查页面状态
+    const pageText = document.body.textContent || '';
+    const pageContainsText = pageText.includes(textToFind);
+    console.log('📄 页面全文预检:', pageContainsText ? '✅ 包含目标文本' : '❌ 不包含目标文本');
+    
+    if (!pageContainsText) {
+      // 尝试部分匹配预检
+      const words = textToFind.split(/\s+/).filter(w => w.length > 3);
+      const matchedWords = words.filter(word => pageText.includes(word));
+      console.log(`🔍 词语匹配预检: ${matchedWords.length}/${words.length} (${matchedWords.slice(0, 3).join(', ')})`);
+    }
     const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
@@ -2432,22 +2659,54 @@ function restoreHighlightInDOM(highlight, highlightId) {
     let found = false;
     let textNode;
     
-    // 遍历所有文本节点，寻找匹配的内容
+    // 遍历所有文本节点，使用简单的包含匹配
+    let foundMatch = false;
+    
     while (textNode = walker.nextNode()) {
       const nodeText = textNode.textContent;
-      const index = nodeText.indexOf(textToFind);
       
+      // 1. 先尝试精确匹配
+      let index = nodeText.indexOf(textToFind);
       if (index !== -1) {
-        console.log('🎯 找到匹配的文本节点:', nodeText.substring(index, index + 50) + '...');
+        console.log('🎯 找到精确匹配:', nodeText.substring(index, index + 50) + '...');
+        foundMatch = true;
+      } else {
+        // 2. 尝试包含匹配（关键改进！）
+        // 检查节点文本是否包含目标文本的一部分
+        if (nodeText.includes(textToFind)) {
+          console.log('🎯 找到完整包含匹配:', nodeText.substring(0, 50) + '...');
+          index = nodeText.indexOf(textToFind);
+          foundMatch = true;
+        } else {
+          // 3. 尝试部分包含匹配（目标文本可能被分割）
+          const minMatchLength = Math.min(20, textToFind.length * 0.5);
+          for (let i = 0; i <= textToFind.length - minMatchLength; i++) {
+            const substring = textToFind.substring(i, i + minMatchLength);
+            if (substring.length >= 10 && nodeText.includes(substring)) {
+              console.log('🔍 找到部分包含匹配:', substring, '在', nodeText.substring(0, 50) + '...');
+              index = nodeText.indexOf(substring);
+              foundMatch = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (foundMatch) {
+        console.log('✅ 确定匹配位置:', {
+          节点文本: nodeText.substring(0, 100) + '...',
+          目标文本: textToFind.substring(0, 50) + '...',
+          匹配位置: index
+        });
         
         // 创建范围对象
         const range = document.createRange();
         range.setStart(textNode, index);
-        range.setEnd(textNode, index + textToFind.length);
+        range.setEnd(textNode, index + Math.min(textToFind.length, nodeText.length - index));
         
         // 根据保存的颜色应用高亮 - 与主函数保持一致
         const color = highlight.color || 'yellow';
-        const colorStyles = {
+      const colorStyles = {
           yellow: {
             background: 'rgba(255, 235, 59, 0.9)',
             borderBottom: '2px solid #ffc107',
@@ -2478,36 +2737,40 @@ function restoreHighlightInDOM(highlight, highlightId) {
             boxShadow: '0 1px 3px rgba(255, 152, 0, 0.3)',
             textColor: '#000000'
           }
-        };
+      };
+      
+      const style = colorStyles[color] || colorStyles.yellow;
+      
+      // 应用高亮
+      const span = document.createElement('span');
+      span.dataset.highlightId = highlightId;
+      span.dataset.color = color;
+      span.style.cssText = `
+        background: ${style.background} !important;
+        color: ${style.textColor} !important;
+        padding: 2px 4px !important;
+        border-radius: 3px !important;
+        box-shadow: ${style.boxShadow} !important;
+        cursor: pointer !important;
+        border-bottom: ${style.borderBottom} !important;
+        position: relative !important;
+        z-index: 1 !important;
+        font-weight: 500 !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: normal !important;
+        display: inline !important;
+      `;
+      
+      try {
+        // 使用 surroundContents 包装选中的文本
+        range.surroundContents(span);
         
-        const style = colorStyles[color] || colorStyles.yellow;
-        
-        // 应用高亮
-        const span = document.createElement('span');
-        span.dataset.highlightId = highlightId;
-        span.dataset.color = color;
-        span.style.cssText = `
-          background: ${style.background} !important;
-          color: ${style.textColor} !important;
-          padding: 2px 4px !important;
-          border-radius: 3px !important;
-          box-shadow: ${style.boxShadow} !important;
-          cursor: pointer !important;
-          border-bottom: ${style.borderBottom} !important;
-          position: relative !important;
-          z-index: 1 !important;
-          font-weight: 500 !important;
-        `;
-        
-        try {
-          // 使用 surroundContents 包装选中的文本
-          range.surroundContents(span);
-          
-          // 添加点击事件
-          span.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showHighlightDetails(highlightId);
-          });
+        // 添加点击事件
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showHighlightDetails(highlightId);
+        });
           
           // 添加视觉标识 - 与主函数保持一致
           const indicator = document.createElement('span');
@@ -2531,12 +2794,29 @@ function restoreHighlightInDOM(highlight, highlightId) {
             indicator.textContent = '💬';
             indicator.title = '点击查看评论内容';
             
-            // 添加悬停显示评论的功能
-            indicator.addEventListener('mouseenter', () => {
-              showCommentTooltip(indicator, highlight.comment);
+            // 添加悬停显示评论的功能 - 增强稳定性（恢复方法1）
+            indicator.addEventListener('mouseenter', (e) => {
+              e.stopPropagation();
+              console.log('🖱️ 鼠标进入恢复的评论图标1');
+              setTimeout(() => {
+                showCommentTooltip(indicator, highlight.comment);
+              }, 100);
             });
-            indicator.addEventListener('mouseleave', () => {
-              hideCommentTooltip();
+            indicator.addEventListener('mouseleave', (e) => {
+              e.stopPropagation();
+              console.log('🖱️ 鼠标离开恢复的评论图标1');
+              setTimeout(() => {
+                hideCommentTooltip();
+              }, 150);
+            });
+            
+            // 添加点击事件也显示评论
+            indicator.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showCommentTooltip(indicator, highlight.comment);
+              setTimeout(() => {
+                hideCommentTooltip();
+              }, 3000);
             });
           } else {
             // 纯划线 - 简洁的标识
@@ -2551,8 +2831,24 @@ function restoreHighlightInDOM(highlight, highlightId) {
             indicator.title = '纯划线';
           }
           
-          // 将标识插入到划线元素后面
-          span.parentNode.insertBefore(indicator, span.nextSibling);
+          // 将标识插入到划线元素后面 - 处理列表结构
+          try {
+            const listItem = span.closest('li, ol, ul');
+            if (listItem) {
+              const wrapper = document.createElement('span');
+              wrapper.style.cssText = 'white-space: nowrap; display: inline;';
+              span.parentNode.insertBefore(wrapper, span);
+              wrapper.appendChild(span);
+              wrapper.appendChild(indicator);
+            } else {
+              span.parentNode.insertBefore(indicator, span.nextSibling);
+            }
+          } catch (error) {
+            console.warn('⚠️ 恢复时标识插入失败，使用备用方法:', error);
+            indicator.style.position = 'relative';
+            indicator.style.display = 'inline';
+            span.appendChild(indicator);
+          }
           
           console.log('✅ 成功恢复划线:', highlightId);
           found = true;
@@ -2598,12 +2894,29 @@ function restoreHighlightInDOM(highlight, highlightId) {
             indicator.textContent = '💬';
             indicator.title = '点击查看评论内容';
             
-            // 添加悬停显示评论的功能
-            indicator.addEventListener('mouseenter', () => {
-              showCommentTooltip(indicator, highlight.comment);
+            // 添加悬停显示评论的功能 - 增强稳定性（恢复方法2）
+            indicator.addEventListener('mouseenter', (e) => {
+              e.stopPropagation();
+              console.log('🖱️ 鼠标进入恢复的评论图标2');
+              setTimeout(() => {
+                showCommentTooltip(indicator, highlight.comment);
+              }, 100);
             });
-            indicator.addEventListener('mouseleave', () => {
-              hideCommentTooltip();
+            indicator.addEventListener('mouseleave', (e) => {
+              e.stopPropagation();
+              console.log('🖱️ 鼠标离开恢复的评论图标2');
+              setTimeout(() => {
+                hideCommentTooltip();
+              }, 150);
+            });
+            
+            // 添加点击事件也显示评论
+            indicator.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showCommentTooltip(indicator, highlight.comment);
+              setTimeout(() => {
+                hideCommentTooltip();
+              }, 3000);
             });
           } else {
             // 纯划线 - 简洁的标识
@@ -2618,13 +2931,38 @@ function restoreHighlightInDOM(highlight, highlightId) {
             indicator.title = '纯划线';
           }
           
-          // 替换原文本节点
+          // 替换原文本节点 - 处理列表结构
           const parent = textNode.parentNode;
-          parent.insertBefore(beforeNode, textNode);
-          parent.insertBefore(span, textNode);
-          parent.insertBefore(indicator, textNode);
-          parent.insertBefore(afterNode, textNode);
-          parent.removeChild(textNode);
+          
+          try {
+            const listItem = parent.closest('li, ol, ul');
+            if (listItem) {
+              // 在列表中，创建包装器
+              const wrapper = document.createElement('span');
+              wrapper.style.cssText = 'white-space: nowrap; display: inline;';
+              
+              parent.insertBefore(beforeNode, textNode);
+              parent.insertBefore(wrapper, textNode);
+              wrapper.appendChild(span);
+              wrapper.appendChild(indicator);
+              parent.insertBefore(afterNode, textNode);
+              parent.removeChild(textNode);
+            } else {
+              // 正常情况
+              parent.insertBefore(beforeNode, textNode);
+              parent.insertBefore(span, textNode);
+              parent.insertBefore(indicator, textNode);
+              parent.insertBefore(afterNode, textNode);
+              parent.removeChild(textNode);
+            }
+          } catch (error) {
+            console.warn('⚠️ 手动恢复时处理失败，使用简单方法:', error);
+            parent.insertBefore(beforeNode, textNode);
+            parent.insertBefore(span, textNode);
+            span.appendChild(indicator);
+            parent.insertBefore(afterNode, textNode);
+            parent.removeChild(textNode);
+          }
           
           console.log('✅ 手动恢复划线成功:', highlightId);
           found = true;
@@ -2634,7 +2972,10 @@ function restoreHighlightInDOM(highlight, highlightId) {
     }
     
     if (!found) {
-      console.log('❌ 未找到匹配的文本，可能页面内容已变化:', textToFind.substring(0, 50) + '...');
+      console.log('❌ 无法找到任何匹配的文本:', {
+        target: textToFind.substring(0, 50) + '...',
+        尝试的匹配策略: '精确匹配、包含匹配、部分匹配'
+      });
     }
     
     return found;
@@ -2731,7 +3072,12 @@ function showHighlightPanel() {
   
   panel.innerHTML = `
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0; font-size: 18px;">🖍️ 划线管理 (${currentHighlights.length})</h3>
+      <div>
+        <h3 style="margin: 0; font-size: 18px;">🖍️ 划线管理</h3>
+        <div style="font-size: 11px; opacity: 0.9; margin-top: 4px;">
+          📊 存储: ${currentHighlights.length} | 页面: ${document.querySelectorAll('[data-highlight-id]').length} ${document.querySelectorAll('[data-highlight-id]').length < currentHighlights.length ? '⚠️ 点击🔄恢复' : '✅'}
+        </div>
+      </div>
       <button id="close-highlight-panel" style="background: none; border: none; color: white; cursor: pointer; font-size: 20px;">✖️</button>
     </div>
     
@@ -2743,6 +3089,7 @@ function showHighlightPanel() {
     </div>
     
     <div style="padding: 16px; border-top: 1px solid #eee; text-align: right;">
+      <button id="test-search" style="background: #4285f4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-right: 8px;">🔍 测试搜索</button>
       <button id="clear-all-highlights" style="background: #ea4335; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-right: 8px;">清除所有划线</button>
       <button id="close-panel" style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">关闭</button>
     </div>
@@ -2751,6 +3098,57 @@ function showHighlightPanel() {
   document.body.appendChild(panel);
   
   // 事件处理
+  
+  // 测试搜索功能
+  document.getElementById('test-search').addEventListener('click', function() {
+    console.log('🔍 开始测试搜索页面内容...');
+    
+    // 测试所有当前页面的划线文本是否能在DOM中找到
+    const currentUrl = window.location.href;
+    const testHighlights = Array.from(highlightData.values()).filter(h => h.url === currentUrl);
+    
+    console.log(`📊 测试 ${testHighlights.length} 个划线文本:`);
+    
+    testHighlights.forEach((highlight, index) => {
+      const textToFind = highlight.text;
+      console.log(`\n🧪 测试 ${index + 1}: ${textToFind.substring(0, 50)}...`);
+      
+      // 1. 测试页面全文搜索
+      const pageText = document.body.textContent || document.body.innerText || '';
+      const exactMatch = pageText.includes(textToFind);
+      console.log(`📄 页面全文包含: ${exactMatch ? '✅' : '❌'}`);
+      
+      // 2. 测试DOM选择器查找
+      const elements = document.querySelectorAll('[class*="response"], [class*="model"], [class*="content"], [role="main"], main, article');
+      let foundInElements = false;
+      
+      elements.forEach((element, i) => {
+        if (element.textContent.includes(textToFind)) {
+          console.log(`🎯 找到匹配元素 ${i + 1}: ${element.className || element.tagName}`);
+          foundInElements = true;
+        }
+      });
+      
+      if (!foundInElements) {
+        console.log('❌ 在主要内容元素中未找到');
+      }
+      
+      // 3. 测试部分匹配
+      const words = textToFind.split(/\s+/).filter(word => word.length > 3);
+      const partialMatches = words.filter(word => pageText.includes(word));
+      console.log(`🔍 部分匹配: ${partialMatches.length}/${words.length} 个词语`);
+      console.log(`📝 匹配的词语: ${partialMatches.slice(0, 3).join(', ')}${partialMatches.length > 3 ? '...' : ''}`);
+    });
+    
+    // 显示DOM状态信息
+    console.log('\n📋 DOM状态信息:');
+    console.log(`🕒 页面加载时间: ${performance.now().toFixed(2)}ms`);
+    console.log(`📊 document.readyState: ${document.readyState}`);
+    console.log(`🔢 总文本节点数: ${document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT).nextNode() ? '有文本节点' : '无文本节点'}`);
+    console.log(`📏 页面文本长度: ${pageText.length} 字符`);
+    
+    showToast('测试搜索完成，请查看控制台', 'info');
+  });
   document.getElementById('close-highlight-panel').addEventListener('click', () => panel.remove());
   document.getElementById('close-panel').addEventListener('click', () => panel.remove());
   
@@ -2861,14 +3259,13 @@ function createHighlightItem(highlight) {
         ">删除</button>
       </div>
       
-      <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid ${colorDot}; margin-bottom: 8px; position: relative;">
+      <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid ${colorDot}; margin-bottom: 8px;">
         <div style="font-size: 14px; line-height: 1.4; color: #333;">${highlight.text}</div>
-        ${!highlight.comment ? '<div style="position: absolute; top: 8px; right: 8px; color: #999; font-size: 12px;">...</div>' : ''}
       </div>
       
       ${highlight.comment ? `
         <div class="comment-hover-container" style="background: #e3f2fd; padding: 8px; border-radius: 4px; border-left: 3px solid #2196f3; position: relative; cursor: pointer;">
-          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">💬 评论:::</div>
+          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">💬 评论</div>
           <div class="comment-preview" style="font-size: 13px; color: #555; max-height: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             ${highlight.comment.length > 50 ? highlight.comment.substring(0, 50) + '...' : highlight.comment}
           </div>
@@ -2983,8 +3380,50 @@ function scrollToHighlight(highlightId) {
     }
     
   } else {
-    console.log('❌ 未找到对应的划线元素，可能需要重新渲染');
-    showToast('未找到对应的划线，可能页面内容已变化', 'error');
+    console.log('❌ 未找到对应的划线元素，尝试恢复后重新定位');
+    
+    // 强制恢复高亮后重新尝试
+    restoreHighlightsOnPage().then(() => {
+      setTimeout(() => {
+        const element = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+        if (element) {
+          console.log('✅ 恢复后找到了划线元素，开始定位');
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+          
+          // 添加闪烁效果
+          const originalStyle = element.style.cssText;
+          let blinkCount = 0;
+          const blinkInterval = setInterval(() => {
+            if (blinkCount % 2 === 0) {
+              element.style.boxShadow = '0 0 20px rgba(255, 0, 0, 1) !important';
+              element.style.transform = 'scale(1.1) !important';
+            } else {
+              element.style.boxShadow = element.dataset.color ? 
+                getOriginalShadow(element.dataset.color) : '0 1px 3px rgba(255, 193, 7, 0.3) !important';
+              element.style.transform = 'scale(1) !important';
+            }
+            
+            blinkCount++;
+            if (blinkCount >= 6) {
+              clearInterval(blinkInterval);
+              element.style.cssText = originalStyle;
+            }
+          }, 300);
+          
+          // 关闭面板
+          const panel = document.getElementById('highlight-panel');
+          if (panel) {
+            panel.remove();
+          }
+        } else {
+          showToast('无法找到指定的划线内容，可能已被删除', 'error');
+        }
+      }, 500);
+    });
   }
 }
 
