@@ -1,6 +1,6 @@
-# Gemini Timeline Assistant
+# AI Timeline Assistant
 
-这是一个为Chrome/Edge浏览器开发的插件，用于解决Gemini对话过程中的一个痛点：当对话很长时，难以快速查看和跳转到之前的问题。
+这是一个为Chrome/Edge浏览器开发的插件，支持Gemini和DeepSeek平台，用于解决AI对话过程中的一个痛点：当对话很长时，难以快速查看和跳转到之前的问题。
 
 ## 🚀 功能特点
 
@@ -48,9 +48,11 @@
 ## 🎯 使用方法
 
 ### 基本使用
-1. 打开Gemini对话页面 `https://gemini.google.com/`
-2. 开始与Gemini对话
-3. 插件会自动在页面右侧显示时间线容器
+1. 打开支持的AI对话页面：
+   - Gemini: `https://gemini.google.com/`
+   - DeepSeek: `https://chat.deepseek.com/`
+2. 开始与AI对话
+3. 插件会自动检测平台并在页面右侧显示时间线容器
 4. 时间线会实时显示您的所有问题，新问题出现在顶部
 
 ### 搜索功能
@@ -73,12 +75,20 @@
 
 ## 🔧 技术特性
 
-### DOM结构识别
-插件基于Gemini的真实DOM结构进行问题识别，使用以下选择器：
+### 智能平台适配
+插件采用智能适配策略，根据不同AI平台使用相应的DOM选择器：
+
+**Gemini平台选择器：**
+- `[data-message-author-role="user"]` - 用户消息容器
 - `user-query-content` - 用户查询内容标签
 - `.user-query-bubble-with-background` - 用户问题气泡
 - `.query-text` - 问题文本容器
-- `.query-text-line` - 问题文本行
+
+**DeepSeek平台选择器：**
+- `[data-role="user"]` - 用户角色标识
+- `.user-message` - 用户消息类
+- `.message-user` - 用户消息容器
+- `[class*="user"]` - 包含用户关键词的类
 
 ### 过滤策略
 - **零内容过滤**：不基于文本内容进行判断
@@ -128,7 +138,9 @@ chrome插件/
 
 ## 🔄 更新历史
 
-### 最新版本特性
+### v1.1 最新版本特性
+- 🆕 **DeepSeek支持**：新增对DeepSeek平台的完整支持
+- 🆕 **智能平台适配**：自动检测并适配不同AI平台
 - ✅ **零内容过滤**：完全基于DOM结构，不会误过滤任何用户问题
 - ✅ **搜索功能**：实时搜索和过滤问题
 - ✅ **100个问题显示**：从10个增加到100个问题容量
@@ -146,11 +158,14 @@ chrome插件/
 
 ## 🚨 注意事项
 
-- 本插件仅在Gemini页面（`gemini.google.com`）上工作
-- 插件会自动适配Gemini的DOM结构变化
+- 本插件支持以下AI平台：
+  - Gemini (`gemini.google.com`)
+  - DeepSeek (`chat.deepseek.com`)
+- 插件会自动检测平台并适配相应的DOM结构
 - 建议定期更新插件以保持最佳兼容性
 - 如遇问题，可通过控制台日志进行排查
 - 插件不会收集或存储任何用户数据
+- 所有数据均存储在本地浏览器中
 
 ## 🛠️ 开发说明
 
@@ -177,4 +192,4 @@ chrome插件/
 
 ---
 
-**开发理念**：专注解决Gemini长对话中的问题跳转痛点，提供纯净、高效、智能的问题时间线体验。
+**开发理念**：专注解决AI长对话中的问题跳转痛点，提供跨平台、纯净、高效、智能的问题时间线体验。

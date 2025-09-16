@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Gemini Timeline Assistant",
-  "version": "1.0",
-  "description": "在Gemini对话中显示问题时间线，方便快速跳转到之前的问题",
+  "name": "AI Timeline Assistant",
+  "version": "1.1",
+  "description": "在AI对话中显示问题时间线，支持Gemini和DeepSeek平台，方便快速跳转到之前的问题",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_popup": "popup.html",
@@ -14,7 +14,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://gemini.google.com/*"],
+      "matches": ["*://gemini.google.com/*", "*://chat.deepseek.com/*"],
       "js": ["content.js"],
       "css": ["style.css"]
     }

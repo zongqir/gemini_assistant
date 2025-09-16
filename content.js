@@ -1,7 +1,68 @@
 // ==============================================
 // GEMINI TIMELINE ASSISTANT - CONTENT SCRIPT
 // ==============================================
-console.log('🔥🔥🔥 GEMINI TIMELINE CONTENT SCRIPT LOADED 🔥🔥🔥');
+console.log('🔥🔥🔥 AI TIMELINE CONTENT SCRIPT LOADED 🔥🔥🔥');
+
+// DeepSeek DOM 调试函数
+function debugDeepSeekDOM() {
+  console.log('🔍 DeepSeek DOM 调试开始...');
+  
+  // 检查所有可能的消息容器
+  const messageSelectors = [
+    '[class*="message"]',
+    '[class*="conversation"]',
+    '[class*="chat"]',
+    '[class*="dialog"]',
+    'div[class^="_"]',  // DeepSeek的混淆类名通常以_开头
+    'div[class*="_"][class*="d"]'  // 可能包含数字和字母的混淆类
+  ];
+  
+  messageSelectors.forEach(selector => {
+    try {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        console.log(`🎯 ${selector}: 找到 ${elements.length} 个元素`);
+        
+        // 分析前几个元素的内容
+        for (let i = 0; i < Math.min(3, elements.length); i++) {
+          const el = elements[i];
+          const text = el.textContent.trim();
+          if (text.length > 0 && text.length < 200) {
+            console.log(`  [${i}] 文本: "${text.substring(0, 50)}..."`);
+            console.log(`  [${i}] 类名: "${el.className}"`);
+            console.log(`  [${i}] 标签: ${el.tagName}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`❌ ${selector}: 选择器错误 - ${e.message}`);
+    }
+  });
+  
+  // 尝试找到对话内容的规律
+  console.log('🔍 尝试分析对话内容模式...');
+  const allDivs = document.querySelectorAll('div[class]');
+  let userMessages = 0;
+  let aiMessages = 0;
+  
+  allDivs.forEach(div => {
+    const text = div.textContent.trim();
+    // 检查是否可能是用户消息
+    if (text.length > 10 && text.length < 500) {
+      if (text.includes('你好') || text.includes('请') || text.includes('？') || text.includes('?')) {
+        console.log(`🙋 可能的用户消息: "${text.substring(0, 30)}..." (类名: ${div.className})`);
+        userMessages++;
+      }
+      // 检查是否可能是AI回答
+      else if (text.length > 50 && (text.includes('我') || text.includes('可以') || text.includes('。'))) {
+        console.log(`🤖 可能的AI回答: "${text.substring(0, 30)}..." (类名: ${div.className})`);
+        aiMessages++;
+      }
+    }
+  });
+  
+  console.log(`📊 分析结果: 可能的用户消息 ${userMessages} 条, AI回答 ${aiMessages} 条`);
+}
 console.log('当前页面URL:', window.location.href);
 console.log('当前时间:', new Date().toLocaleString());
 
@@ -11,15 +72,97 @@ window.addEventListener('load', function() {
   initPlugin();
 });
 
+// ==============================================
+// 平台检测系统 - 智能适配Gemini和DeepSeek
+// ==============================================
+
+// 检测当前平台类型
+function detectPlatform() {
+  const hostname = window.location.hostname;
+  const href = window.location.href;
+  
+  if (hostname === 'gemini.google.com') {
+    return 'gemini';
+  } else if (hostname === 'chat.deepseek.com') {
+    return 'deepseek';
+  }
+  return null;
+}
+
+// 获取平台特定的配置
+function getPlatformConfig(platform) {
+  const configs = {
+    gemini: {
+      name: 'Gemini',
+      containerSelectors: [
+        '[class*="conversation-turn"][data-is-user-turn="true"]',
+        '[class*="user-turn"]',
+        '[class*="user-message"]',
+        '[data-message-author-role="user"]',
+        '[class*="question"]'
+      ],
+      responseSelectors: [
+        '[data-message-author-role="model"]',
+        '[data-message-author-role="assistant"]',
+        '.model-response',
+        '.assistant-response',
+        '[class*="response"]',
+        '[class*="model"]'
+      ]
+    },
+    deepseek: {
+      name: 'DeepSeek',
+      containerSelectors: [
+        // DeepSeek使用混淆类名，基于控制台分析结果更新
+        '[class*="message"]',  // 6个容器中可能包含用户消息
+        '[class*="user"]',
+        '[role="user"]',
+        '[data-role="user"]',
+        // 通用备选选择器
+        '.conversation-item',
+        '.chat-message',
+        '.human-message',
+        // 基于文本内容的更广泛选择器
+        'div:has-text("用户")',
+        'div[class]:contains("用户")'
+      ],
+      responseSelectors: [
+        // 基于控制台发现的"ai"类
+        '[class*="ai"]',  // 控制台显示找到2个元素
+        '[class*="message"]',  // message容器也可能包含AI回答
+        '[class*="assistant"]',
+        '[role="assistant"]',
+        '[data-role="assistant"]',
+        '.conversation-item',
+        '.chat-response',
+        '.ai-message',
+        // 通用备选选择器
+        'div:has-text("助理")',
+        'div[class]:contains("助理")'
+      ]
+    }
+  };
+  
+  return configs[platform] || null;
+}
+
 // 当DOM内容变化时也尝试初始化（针对SPA应用）
 function initPlugin() {
   console.log('🔧 initPlugin被调用，当前域名:', window.location.hostname);
-  // 检查是否在Gemini页面
-  if (window.location.hostname === 'gemini.google.com') {
-    console.log('✅ 在Gemini页面，检查初始化状态');
+  
+  // 检测平台类型
+  const platform = detectPlatform();
+  if (platform) {
+    const config = getPlatformConfig(platform);
+    console.log(`✅ 检测到${config.name}平台，检查初始化状态`);
+    
+    // 存储当前平台配置到全局变量
+    window.currentPlatform = platform;
+    window.platformConfig = config;
+    
     // 确保只初始化一次
     if (!window.geminiTimelineInitialized) {
-      console.log('🚀 开始初始化Timeline插件');
+      console.log(`🚀 开始初始化Timeline插件 (${config.name})`);
       window.geminiTimelineInitialized = true;
       
       // 创建时间线容器
@@ -34,13 +177,19 @@ function initPlugin() {
       console.log('⚠️ Timeline插件已经初始化过了');
     }
   } else {
-    console.log('❌ 不在Gemini页面，跳过初始化');
+    console.log('❌ 不在支持的平台，跳过初始化。支持：Gemini, DeepSeek');
   }
 }
 
 // 简化的初始化函数
 async function initializeTimeline() {
-  console.log('Gemini Timeline: 开始简化初始化');
+  console.log('AI Timeline: 开始简化初始化');
+  console.log(`🌟 当前平台: ${window.currentPlatform || '未知'}`);
+  
+  // 在DeepSeek上进行额外的DOM调试
+  if (window.currentPlatform === 'deepseek') {
+    debugDeepSeekDOM();
+  }
   
   // 初始化标注数据
   await initBookmarks();
@@ -51,7 +200,7 @@ async function initializeTimeline() {
   // 检查当前页面是否有标注问题
   const currentBookmarks = getCurrentPageBookmarks();
   if (currentBookmarks.length > 0) {
-    console.log(`Gemini Timeline: 当前页面找到 ${currentBookmarks.length} 个标注问题`);
+    console.log(`AI Timeline: 当前页面找到 ${currentBookmarks.length} 个标注问题`);
     // 显示标注问题的提示
     showBookmarkNotification(currentBookmarks.length);
   }
@@ -190,18 +339,21 @@ function createTimelineContainer() {
     justify-content: space-between;
     align-items: center;
     font-size: 16px;
+    white-space: nowrap;
+    min-height: 40px;
+    flex-wrap: nowrap;
   `;
   header.innerHTML = `
-    <span>AI小助手</span>
-    <div>
-      <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; opacity: 0.7;">⭐</button>
-      <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">📝</button>
-      <button id="highlights-toggle" title="查看所有划线内容" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🖍️</button>
-      <button id="restore-highlights" title="刷新后点此恢复划线显示" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 6px; opacity: 0.7;">🔄</button>
-      <button id="global-toggle" title="查看所有对话的标记和笔记" style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; padding: 0; margin-right: 6px; opacity: 0.7;">🌐</button>
-      <button id="clear-all-data" title="清除所有标记和笔记数据" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px; padding: 0; margin-right: 8px; opacity: 0; display: none;">🗑️</button>
-      <span id="question-count" style="font-size: 12px; opacity: 0.8; margin-right: 10px;">0 个问题</span>
-      <button id="timeline-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 0;">−</button>
+    <span style="flex-shrink: 0; font-size: 14px;">AI小助手</span>
+    <div style="display: flex; align-items: center; flex-wrap: nowrap; white-space: nowrap;">
+      <button id="bookmarks-toggle" title="只显示标注问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 2px; margin-right: 3px; opacity: 0.7; flex-shrink: 0;">⭐</button>
+      <button id="notes-toggle" title="只显示有笔记的问题" style="background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 2px; margin-right: 3px; opacity: 0.7; flex-shrink: 0;">📝</button>
+      <button id="highlights-toggle" title="查看所有划线内容" style="background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 2px; margin-right: 3px; opacity: 0.7; flex-shrink: 0;">🖍️</button>
+      <button id="restore-highlights" title="刷新后点此恢复划线显示" style="background: none; border: none; color: white; cursor: pointer; font-size: 11px; padding: 2px; margin-right: 3px; opacity: 0.7; flex-shrink: 0;">🔄</button>
+      <button id="global-toggle" title="查看所有对话的标记和笔记" style="background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 2px; margin-right: 3px; opacity: 0.7; flex-shrink: 0;">🌐</button>
+      <button id="clear-all-data" title="清除所有标记和笔记数据" style="background: none; border: none; color: white; cursor: pointer; font-size: 11px; padding: 2px; margin-right: 3px; opacity: 0; display: none; flex-shrink: 0;">🗑️</button>
+      <span id="question-count" style="font-size: 10px; opacity: 0.8; margin-right: 5px; flex-shrink: 0;">0 个问题</span>
+      <button id="timeline-toggle" style="background: none; border: none; color: white; cursor: pointer; font-size: 16px; padding: 2px; opacity: 0.7; flex-shrink: 0;">−</button>
     </div>
   `;
 
@@ -712,16 +864,19 @@ async function forceCleanExpiredBookmarks() {
 
 // 获取当前页面所有用户问题（统一的获取逻辑）
 function getAllUserQuestions() {
-  const containerSelectors = [
-    '[class*="conversation-turn"][data-is-user-turn="true"]',
-    '[class*="user-turn"]',
-    '[class*="user-message"]',
-    '[data-role="user"]',
-    '[class*="user-query-bubble"]',
-    'user-query-content',
-    '.query-text',
-    '[class*="query-text"]'
-  ];
+  // 使用平台特定的选择器
+  const containerSelectors = window.platformConfig ? 
+    window.platformConfig.containerSelectors : 
+    [
+      '[class*="conversation-turn"][data-is-user-turn="true"]',
+      '[class*="user-turn"]',
+      '[class*="user-message"]',
+      '[data-role="user"]',
+      '[class*="user-query-bubble"]',
+      'user-query-content',
+      '.query-text',
+      '[class*="query-text"]'
+    ];
   
   const foundQuestions = [];
   
@@ -1225,17 +1380,19 @@ function handleTextSelection(event) {
     parentTagName: parentElement ? parentElement.tagName : 'N/A'
   });
   
-  // 扩展的选择器列表，尝试匹配各种可能的Gemini回答区域
-  const selectors = [
-    '[data-message-author-role="model"]',
-    '[data-message-author-role="assistant"]', 
-    '.model-response',
-    '.assistant-response',
-    '[class*="response"]',
-    '[class*="message"][class*="assistant"]',
-    '[class*="message"][class*="model"]',
-    '[class*="assistant"]',
-    '[class*="ai-response"]',
+  // 使用平台特定的回答区域选择器
+  const selectors = window.platformConfig ? 
+    window.platformConfig.responseSelectors : 
+    [
+      '[data-message-author-role="model"]',
+      '[data-message-author-role="assistant"]', 
+      '.model-response',
+      '.assistant-response',
+      '[class*="response"]',
+      '[class*="message"][class*="assistant"]',
+      '[class*="message"][class*="model"]',
+      '[class*="assistant"]',
+      '[class*="ai-response"]',
     '[role="assistant"]',
     'article',
     '.markdown-content',
@@ -1760,12 +1917,14 @@ function findRelatedQuestionId(range) {
   }
   
   if (conversationGroup) {
-    // 在这个对话组中寻找用户问题
-    const userQuestionSelectors = [
-      '[data-message-author-role="user"]',
-      '[class*="user"]',
-      '[class*="question"]'
-    ];
+    // 在这个对话组中寻找用户问题，使用平台特定选择器
+    const userQuestionSelectors = window.platformConfig ? 
+      window.platformConfig.containerSelectors : 
+      [
+        '[data-message-author-role="user"]',
+        '[class*="user"]',
+        '[class*="question"]'
+      ];
     
     let userQuestion = null;
     for (const selector of userQuestionSelectors) {
@@ -4847,16 +5006,18 @@ function scanQuestions() {
   // 🎯 新的策略：优先寻找问题的父容器，而不是子元素
   console.log('Gemini Timeline: 使用父容器优先检测策略');
   
-  // 分层次的选择器策略：从父容器到子元素
-  const containerSelectors = [
-    // 最外层容器选择器 - 这些通常包含完整的问题
-    '[class*="conversation-turn"][data-is-user-turn="true"]',
-    '[class*="user-turn"]',
-    '[class*="user-message"]',
-    '[data-role="user"]',
-    // 中层容器选择器
-    '[class*="user-query-bubble"]',
-    'user-query-content',
+  // 使用平台特定的选择器策略：从父容器到子元素
+  const containerSelectors = window.platformConfig ? 
+    window.platformConfig.containerSelectors : 
+    [
+      // 最外层容器选择器 - 这些通常包含完整的问题
+      '[class*="conversation-turn"][data-is-user-turn="true"]',
+      '[class*="user-turn"]',
+      '[class*="user-message"]',
+      '[data-role="user"]',
+      // 中层容器选择器
+      '[class*="user-query-bubble"]',
+      'user-query-content',
     // 备用选择器 - 如果上面都没找到才使用
     '.query-text',
     '[class*="query-text"]'
