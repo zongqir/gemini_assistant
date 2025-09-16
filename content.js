@@ -5245,59 +5245,35 @@ function renderTimeline(userMessages) {
       
       questionItem.appendChild(questionContent);
       
-        // 如果有笔记，在问题下方显示笔记内容
-      if (isBookmarkedQuestion) {
-        const bookmark = bookmarkedQuestions.get(questionId);
-        const noteText = bookmark?.note || '';
-        
-        if (noteText) {
-          const noteDisplay = document.createElement('div');
-          noteDisplay.style.cssText = `
-            margin-top: 6px;
-            padding: 8px 10px;
-            background: rgba(255, 215, 0, 0.1);
-            border-radius: 4px;
-            font-size: 12px;
-            color: #666;
-            line-height: 1.3;
-            border-left: 3px solid #ffd700;
-            cursor: pointer;
-          `;
-          noteDisplay.innerHTML = `
-            <div style="display: flex; align-items: center; margin-bottom: 2px;">
-              <span style="font-weight: 500; color: #b8860b;">📝 笔记:</span>
-            </div>
-            <div style="word-break: break-word; white-space: pre-wrap; line-height: 1.5;">${noteText}</div>
-          `;
-          
-          // 点击笔记区域也可以编辑
-          noteDisplay.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showNoteModal(questionId, questionText, noteText);
-          });
-          
-          // 笔记区域悬停效果
-          noteDisplay.addEventListener('mouseenter', function() {
-            this.style.background = 'rgba(255, 215, 0, 0.15)';
-          });
-          
-          noteDisplay.addEventListener('mouseleave', function() {
-            this.style.background = 'rgba(255, 215, 0, 0.1)';
-          });
-          
-          questionItem.appendChild(noteDisplay);
-        }
-      }
+      // 检查是否有笔记内容
+      const hasNote = isBookmarkedQuestion && bookmarkedQuestions.get(questionId)?.note;
+      
+      // 如果有笔记，准备悬浮显示的数据
+      let noteTooltip = null;
+      const questionNoteText = hasNote ? bookmarkedQuestions.get(questionId)?.note || '' : '';
       
       questionItem.title = questionText; // 完整文本作为tooltip
+      
+      // 根据状态决定背景色
+      let backgroundColor, borderColor;
+      if (hasNote) {
+        backgroundColor = '#e8f5e8'; // 绿色背景 - 有笔记
+        borderColor = '#4caf50'; // 绿色边框
+      } else if (isBookmarkedQuestion) {
+        backgroundColor = '#fff3cd'; // 黄色背景 - 只有标记
+        borderColor = '#ffd700'; // 黄色边框
+      } else {
+        backgroundColor = '#f8f9fa'; // 默认背景
+        borderColor = '#667eea'; // 默认边框
+      }
       
       // 添加样式 - 覆盖CSS文件中的样式
       questionItem.style.cssText = `
         padding: 8px 12px;
         margin: 4px 8px;
-        background: ${isBookmarkedQuestion ? '#fff3cd' : '#f8f9fa'};
+        background: ${backgroundColor};
         border-radius: 6px;
-        border-left: 3px solid ${isBookmarkedQuestion ? '#ffd700' : '#667eea'};
+        border-left: 3px solid ${borderColor};
         transition: all 0.2s ease;
         user-select: text;
         -webkit-user-select: text;
@@ -5379,13 +5355,73 @@ function renderTimeline(userMessages) {
       
       // 添加悬停效果
       questionItem.addEventListener('mouseenter', function() {
-        this.style.background = isBookmarkedQuestion ? '#fff8dc' : '#e3f2fd';
+        // 根据状态设置悬停背景色
+        let hoverBg;
+        if (hasNote) {
+          hoverBg = '#d4edda'; // 绿色悬停
+          
+          // 如果有笔记，显示笔记悬浮提示
+          noteTooltip = document.createElement('div');
+          noteTooltip.style.cssText = `
+            position: fixed;
+            z-index: 10005;
+            background: #1a202c;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.4;
+            max-width: 350px;
+            min-width: 200px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+            border: 1px solid #2d3748;
+            pointer-events: none;
+            backdrop-filter: blur(8px);
+          `;
+          noteTooltip.innerHTML = questionNoteText;
+          
+          document.body.appendChild(noteTooltip);
+          
+          // 定位悬浮提示
+          const rect = this.getBoundingClientRect();
+          const tooltipRect = noteTooltip.getBoundingClientRect();
+          
+          let left = rect.right + 10;
+          let top = rect.top;
+          
+          // 确保不超出屏幕边界
+          if (left + tooltipRect.width > window.innerWidth) {
+            left = rect.left - tooltipRect.width - 10;
+          }
+          if (top + tooltipRect.height > window.innerHeight) {
+            top = window.innerHeight - tooltipRect.height - 10;
+          }
+          if (left < 0) left = 10;
+          if (top < 0) top = 10;
+          
+          noteTooltip.style.left = left + 'px';
+          noteTooltip.style.top = top + 'px';
+        } else if (isBookmarkedQuestion) {
+          hoverBg = '#fff8dc'; // 黄色悬停
+        } else {
+          hoverBg = '#e3f2fd'; // 默认悬停
+        }
+        this.style.background = hoverBg;
         this.style.transform = 'translateX(4px)';
       });
       
       questionItem.addEventListener('mouseleave', function() {
-        this.style.background = isBookmarkedQuestion ? '#fff3cd' : '#f8f9fa';
+        // 恢复原背景色
+        this.style.background = backgroundColor;
         this.style.transform = 'translateX(0)';
+        
+        // 移除笔记悬浮提示
+        if (noteTooltip && noteTooltip.parentNode) {
+          noteTooltip.remove();
+          noteTooltip = null;
+        }
       });
       
       timelineContainer.appendChild(questionItem);
